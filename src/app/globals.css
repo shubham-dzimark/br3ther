@@ -1,0 +1,1965 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+
+}
+
+@theme {
+  /* Site-wide page container. Used as max-w-page. */
+  --container-page: 1470px;
+}
+
+/*
+ * Tailwind ships its own --font-sans default, and it was winning over the
+ * @theme declaration - so every `font-sans` utility resolved to the system
+ * stack while only `body` picked up Urbanist. Setting the variable itself,
+ * after the import, keeps the utility and the variable in agreement.
+ *
+ * --font-site is injected by next/font and resolves to:
+ *   "Public Sans", "Public Sans Fallback"
+ */
+:root {
+  --font-sans:
+    var(--font-site), ui-sans-serif, system-ui, sans-serif,
+    "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+}
+
+/*
+ * Deliberately no prefers-color-scheme block: both the storefront and the
+ * admin are light-only designs, and the scaffold's dark override flipped
+ * --foreground to near-white, washing out text on OS dark mode.
+ */
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+}
+
+/*
+ * Pointer cursor on everything clickable, storefront and admin alike.
+ * Tailwind v4 dropped the v3 default of cursor:pointer on buttons.
+ */
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]),
+summary,
+select,
+label:has(input[type="checkbox"]),
+label:has(input[type="radio"]),
+input[type="checkbox"],
+input[type="radio"],
+input[type="submit"],
+input[type="file"]::file-selector-button {
+  cursor: pointer;
+}
+
+button:disabled,
+[aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
+/* Scrollable, but without a visible scrollbar (sidebar, filter strips). */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+/*
+ * Printing a packing slip.
+ *
+ * Hiding the admin chrome with utility classes proved unreliable - the shell is
+ * a flex layout and a `display:none` on one branch left the document collapsed.
+ * Toggling `visibility` instead keeps the layout intact while painting only the
+ * document, then lifts it to the top of the page.
+ */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  .print-document,
+  .print-document * {
+    visibility: visible;
+  }
+
+  /*
+   * Browsers drop background colours when printing to save ink, which turned
+   * the slip's black header bar white and its white text grey. This opts the
+   * document back in so it prints as designed.
+   */
+  .print-document,
+  .print-document * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .print-document {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    background: #fff;
+  }
+
+  /*
+   * Taken out of the layout, not merely made invisible. `visibility:hidden`
+   * keeps the element's box, so the on-screen toolbar above a label sheet or
+   * an invoice reserved its height on paper and pushed the document a third
+   * of the way down the first page.
+   */
+  .print-hide,
+  .print-hide * {
+    display: none !important;
+  }
+}
+
+/*
+ * Zero page margin, and the document supplies its own padding instead.
+ *
+ * This is what removes the browser's own header and footer - the date, the
+ * page title, the URL and "1/1". Those are drawn by the browser into the page
+ * margin, and no CSS can style or hide them directly; the only reliable lever
+ * is to leave no margin for them to sit in. The visual margin is unchanged
+ * because .print-document pads itself by the same amount.
+ */
+@page {
+  margin: 0;
+}
+
+/*
+ * Print refinements for the invoice and packing slip.
+ *
+ * A table header repeated on every sheet is what stops the second page of a
+ * long order looking like an unlabelled column of numbers, and keeping the
+ * totals block whole avoids a total stranded on its own page.
+ */
+@media print {
+  .print-document thead {
+    display: table-header-group;
+  }
+  .print-document tfoot {
+    display: table-footer-group;
+  }
+  .print-document tr,
+  .print-document .break-inside-avoid {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .print-document footer {
+    break-before: avoid;
+  }
+
+  /* Restores the margin @page gave up, so nothing sits against the paper edge. */
+  .print-document {
+    padding: 14mm !important;
+    /* Full sheet, so a footer with margin-top:auto lands at the bottom of the
+       page rather than immediately under short content. */
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /*
+   * A column flex container may shrink its children to fit. Nothing on these
+   * documents should be squeezed vertically to make the page work out.
+   */
+  .print-document > * {
+    flex-shrink: 0;
+  }
+}
+
+/* Hero slider: the copy fades in when a different panel is selected. */
+@keyframes heroFade {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+.hero-fade { animation: heroFade 0.45s ease-out both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-fade { animation: none; }
+}
+
+/* Announcement bar: message crossfade, and a slow sheen across the strip. */
+@keyframes nlFade {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes nlSheen {
+  0%   { transform: translateX(0); opacity: 0; }
+  12%  { opacity: 1; }
+  60%  { opacity: 1; }
+  100% { transform: translateX(420%); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* The bar's own markup hides the sheen; this covers the crossfade too. */
+  [role="region"][aria-label="Store announcement"] * { animation: none !important; }
+}
+
+/*
+ * While a slide-over is open - the mini cart, the mobile menu - the product
+ * page's sticky buy bar steps out of the way. The cart's own Subtotal and
+ * Checkout sit at the bottom of that panel, exactly where this bar is, and a
+ * shopper cannot reach a button that is underneath it. The mini cart already
+ * marks the document while it is open; the chat button and the purchase
+ * notice use the same signal.
+ */
+html[data-overlay-open] .nl-buybar,
+html[data-overlay-open] .nl-salespop {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* The phone's bottom bar. Declared here rather than set from the component:
+   the bar renders at every screen size and CSS is what hides it, so a value
+   set in JavaScript would raise the product page's sticky buy bar off the
+   bottom of every desktop page too. 0 above the breakpoint means everything
+   that adds this to its offset is unchanged on a wide screen. */
+:root { --tabbar-h: 0px; }
+@media (max-width: 767.98px) {
+  :root { --tabbar-h: calc(4.25rem + env(safe-area-inset-bottom, 0px)); }
+}
+.nl-tabbar {
+  height: var(--tabbar-h);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* The table's own edge and the rules between rows, in the brand's lighter
+   step - there is no per-product colour to set any more. */
+.nl-spec,
+.nl-spec th,
+.nl-spec td {
+  border-color: rgb(var(--brand-light-rgb, 169 120 250) / 0.45);
+}
+
+/* The promise tiles' icon chips, in the same gradient as the buttons. */
+.nl-usp-chip {
+  background-image: linear-gradient(
+    135deg,
+    rgb(var(--brand-rgb, 123 47 247)) 0%,
+    rgb(var(--brand-light-rgb, 169 120 250)) 100%
+  );
+}
+.nl-store[data-style="holo"] .nl-usp-chip {
+  background-image: var(--holo-deep);
+  background-size: 200% 100%;
+  animation: nl-holo-shift 8s ease-in-out infinite alternate;
+}
+
+/* The label column takes the brand gradient, the same shapes the buttons
+   use, with the shop's ink on it. */
+.nl-spec-label {
+  background-image: linear-gradient(
+    135deg,
+    rgb(var(--brand-soft-rgb, 235 224 254)) 0%,
+    rgb(var(--brand-light-rgb, 169 120 250) / 0.55) 100%
+  );
+  color: rgb(var(--brand-dark-rgb, 13 10 28));
+}
+/* Under the holo style the buttons wear the deep foil, so the label column
+   does too - white ink, because that fill is dark. */
+.nl-store[data-style="holo"] .nl-spec-label {
+  background-image: var(--holo-deep);
+  background-size: 200% 100%;
+  animation: nl-holo-shift 8s ease-in-out infinite alternate;
+  color: #fff;
+}
+
+/* The field before its editor is loaded: same shapes as the real thing, so
+   waking it up does not make the page jump. */
+.nl-ck-idle .ck-content h2 { font-size: 1.15rem; font-weight: 700; margin: 0.9em 0 0.35em; }
+.nl-ck-idle .ck-content h3 { font-size: 1rem; font-weight: 700; margin: 0.8em 0 0.3em; }
+.nl-ck-idle .ck-content p { margin: 0 0 0.6em; }
+.nl-ck-idle .ck-content ul { list-style: disc; padding-left: 1.35rem; margin: 0 0 0.6em; }
+.nl-ck-idle .ck-content ol { list-style: decimal; padding-left: 1.5rem; margin: 0 0 0.6em; }
+.nl-ck-idle .ck-content li { margin: 0.15em 0; }
+.nl-ck-idle .ck-content a { color: #0E7C66; text-decoration: underline; }
+.nl-ck-idle .ck-content table { width: 100%; border-collapse: collapse; margin: 0 0 1em; font-size: 0.95em; }
+.nl-ck-idle .ck-content th,
+.nl-ck-idle .ck-content td { border: 1px solid #e2e8f0; padding: 0.4rem 0.6rem; text-align: left; }
+.nl-ck-idle .ck-content img { max-width: 100%; height: auto; }
+.nl-ck-idle:hover { border-color: rgb(203 213 225); }
+
+/* CKEditor 5 in the admin: its own chrome, wearing the shop's shapes. The
+   editable's height comes from the field, so a spec-table cell and a product
+   description can share one component. */
+.nl-ck .ck.ck-editor__editable_inline {
+  min-height: var(--nl-ck-min-height, 220px);
+  border: 0;
+  padding: 0.75rem 1rem;
+}
+.nl-ck .ck.ck-editor__editable_inline.ck-focused {
+  box-shadow: none;
+  border: 0;
+}
+.nl-ck .ck.ck-toolbar {
+  border: 0;
+  border-bottom: 1px solid rgb(241 245 249);
+  background: rgb(248 250 252 / 0.8);
+}
+.nl-ck .ck.ck-editor__main > .ck-editor__editable {
+  background: #fff;
+}
+.nl-ck:focus-within {
+  border-color: var(--admin-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--admin-accent) 15%, transparent);
+}
+/* CKEditor renders its own source view; keep it legible on the dark panel the
+   old Code tab used. */
+.nl-ck .ck-source-editing-area textarea {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 0.75rem 1rem;
+}
+/* The editable shows the same shapes as the storefront, as the old editor did. */
+.nl-ck .ck-content h2 { font-size: 1.15rem; font-weight: 700; margin: 0.9em 0 0.35em; }
+.nl-ck .ck-content h3 { font-size: 1rem; font-weight: 700; margin: 0.8em 0 0.3em; }
+.nl-ck .ck-content p { margin: 0 0 0.6em; }
+.nl-ck .ck-content ul { list-style: disc; padding-left: 1.35rem; margin: 0 0 0.6em; }
+.nl-ck .ck-content ol { list-style: decimal; padding-left: 1.5rem; margin: 0 0 0.6em; }
+.nl-ck .ck-content li { margin: 0.15em 0; }
+.nl-ck .ck-content a { color: #0E7C66; text-decoration: underline; }
+.nl-ck .ck-content blockquote {
+  border-left: 3px solid #cbd5e1; padding-left: 0.9rem; color: #475569; margin: 0 0 0.6em;
+}
+
+/* The same shapes on the storefront, so what the shop owner sees in the
+   editor is what a customer sees on the product page. */
+.nl-prose h2 { font-size: 1.35rem; font-weight: 700; margin: 1.4em 0 0.4em; color: #0f172a; }
+.nl-prose h3 { font-size: 1.1rem; font-weight: 700; margin: 1.2em 0 0.35em; color: #0f172a; }
+.nl-prose p { margin: 0 0 0.85em; }
+.nl-prose ul { list-style: disc; padding-left: 1.35rem; margin: 0 0 0.85em; }
+.nl-prose ol { list-style: decimal; padding-left: 1.5rem; margin: 0 0 0.85em; }
+.nl-prose li { margin: 0.2em 0; }
+.nl-prose a { color: var(--brand, #0E7C66); text-decoration: underline; }
+/* No colour of its own: a word the shop coloured in the editor stays that
+   colour when it is also bold. */
+.nl-prose strong { font-weight: 600; }
+.nl-prose blockquote {
+  border-left: 3px solid #cbd5e1; padding-left: 1rem; color: #475569; margin: 0 0 0.85em;
+}
+.nl-prose > *:last-child { margin-bottom: 0; }
+
+/*
+ * Tables, images, rules and code in shop-written copy. These were shared with
+ * the editor's own preview class until CKEditor replaced it, and removing that
+ * class took the whole rule with it - which is why a table pasted or built in
+ * the editor arrived on the product page with no borders at all.
+ *
+ * CKEditor wraps a table in <figure>, and puts the caption in <figcaption>
+ * after it, so both are styled here too.
+ */
+.nl-prose table {
+  width: 100%; border-collapse: collapse; margin: 0 0 1em; font-size: 0.95em;
+}
+.nl-prose th, .nl-prose td {
+  border: 1px solid #e2e8f0; padding: 0.5rem 0.7rem; text-align: left; vertical-align: top;
+}
+.nl-prose th { background: #f8fafc; font-weight: 600; color: #0f172a; }
+/*
+ * A table's caption sits above the table, which is where the editor shows it
+ * and so where the shop expects to see it. That needs the same two rules the
+ * editor uses: the figure becomes a table box, and the caption its caption -
+ * a figcaption left as a plain block can only ever render after the table.
+ */
+/* The class is what the editor writes; :has() catches a table saved before
+   that class survived the save, so an old description reads right too. */
+.nl-prose figure.table,
+.nl-prose figure:has(> table) { display: table; margin: 0 0 1em; }
+.nl-prose figure.table > figcaption,
+.nl-prose figure:has(> table) > figcaption {
+  display: table-caption;
+  caption-side: top;
+  padding-bottom: 0.4rem;
+  font-size: 0.85em;
+  color: #64748b;
+  text-align: center;
+}
+/* An image's caption belongs under the picture, as captions normally do. */
+.nl-prose caption,
+.nl-prose figure:not(.table):not(:has(> table)) > figcaption {
+  caption-side: bottom; padding-top: 0.4rem; font-size: 0.85em; color: #64748b; text-align: center;
+}
+.nl-prose figure { margin: 0 0 1em; }
+.nl-prose img { max-width: 100%; height: auto; border-radius: 0.6rem; }
+.nl-prose hr { border: 0; border-top: 1px solid #e2e8f0; margin: 1.2em 0; }
+.nl-prose pre {
+  background: #f1f5f9; padding: 0.7rem 0.9rem; border-radius: 0.6rem; overflow-x: auto; font-size: 0.9em;
+}
+.nl-prose code {
+  background: #f1f5f9; padding: 0.1rem 0.35rem; border-radius: 0.35rem; font-size: 0.9em;
+}
+.nl-prose pre code { background: none; padding: 0; }
+
+/* Tables, images and quotes - the same in the editor and on the shop, so what
+   the owner formats is what a customer sees. */
+/* A wide pasted table must scroll rather than break the product page. */
+.nl-prose { overflow-x: auto; }
+
+/* Smooth anchor scrolling - category chips jump to the grid rather than
+   snapping to it. Off for anyone who has asked for reduced motion. */
+@media (prefers-reduced-motion: no-preference) {
+  html { scroll-behavior: smooth; }
+}
+
+/*
+ * The announcement bar and header pin to the top of the window, so any jump to
+ * an id - a #hash link, or the grid after choosing a category - has to stop
+ * below them or it lands behind the bar. The height is a starting guess that
+ * StickyChromeOffset replaces with the measured one, since the bar can be
+ * closed and the header is shorter on a phone.
+ */
+html {
+  --nl-chrome: 112px;
+  scroll-padding-top: var(--nl-chrome);
+}
+
+/*
+ * No scroll anchoring on the storefront's own sections. Anchoring keeps
+ * whatever you were looking at still while something above it changes height -
+ * helpful mid-page, wrong at the top of a page that is still loading: a hero
+ * settling its height would push the page down and leave the shopper looking
+ * at the second section.
+ */
+.nl-store main > * {
+  overflow-anchor: none;
+}
+@media (min-width: 640px) {
+  html { --nl-chrome: 150px; }
+}
+
+/* =========================================================================
+ * Storefront: holographic theme, matched to the logo.
+ *
+ * Everything below is scoped to .nl-store[data-style="holo"] (the storefront
+ * wrapper), so the admin is untouched and Settings > Appearance > Storefront
+ * style "Flat" switches all of it off in one go. Components are not edited:
+ * the rules key off the brand classes and inline brand styles they already
+ * use, so every current and future button, badge and dark panel picks it up.
+ * Only small elements animate - big panels get a static glow - so scrolling
+ * stays smooth.
+ * ========================================================================= */
+
+.nl-store {
+  --holo-bright: linear-gradient(110deg, #ffe14d 0%, #ff6fd8 28%, #b388ff 52%, #5ce1ff 76%, #ffe14d 100%);
+  --holo-deep: linear-gradient(110deg, #e6007e 0%, #7b2ff7 50%, #0096e0 100%);
+}
+
+@keyframes nl-holo-shift {
+  from { background-position: 0% 50%; }
+  to { background-position: 100% 50%; }
+}
+
+@keyframes nl-logo-glow {
+  from { filter: drop-shadow(0 0 5px rgb(255 60 172 / 0.35)) drop-shadow(0 0 12px rgb(0 229 255 / 0.15)); }
+  to { filter: drop-shadow(0 0 10px rgb(255 60 172 / 0.55)) drop-shadow(0 0 20px rgb(0 229 255 / 0.32)); }
+}
+
+/* Highlight buttons, chips and the announcement bar: animated holo foil. */
+.nl-store[data-style="holo"] :is(
+  [class~="bg-[var(--brand-highlight)]"],
+  [style*="background-color:var(--brand-highlight"],
+  [style*="background-color: var(--brand-highlight"]
+) {
+  background-image: var(--holo-bright);
+  background-size: 300% 100%;
+  animation: nl-holo-shift 6s ease-in-out infinite alternate;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.nl-store[data-style="holo"] :is(a, button):is(
+  [class~="bg-[var(--brand-highlight)]"],
+  [style*="background-color:var(--brand-highlight"],
+  [style*="background-color: var(--brand-highlight"]
+):hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 28px -8px rgb(255 60 172 / 0.55), 0 4px 14px -6px rgb(0 229 255 / 0.45);
+}
+
+/* Primary brand fills (solid buttons, progress bars) and deal badges: deep foil. */
+.nl-store[data-style="holo"] :is([class~="bg-[var(--brand)]"], [class~="bg-[#C4123F]"]) {
+  background-image: var(--holo-deep);
+  background-size: 200% 100%;
+  animation: nl-holo-shift 8s ease-in-out infinite alternate;
+}
+
+/* "35% OFF" price text. */
+.nl-store[data-style="holo"] [class~="text-[#C4123F]"] {
+  background-image: var(--holo-deep);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Dark panels (header, hero, USP band, footer, mobile menu): static glow. */
+.nl-store[data-style="holo"] :is(
+  [class~="bg-[var(--brand-surface)]"],
+  [class~="bg-[var(--brand-dark)]"],
+  [style*="background-color:var(--brand-surface"],
+  [style*="background-color: var(--brand-surface"],
+  [style*="background-color:var(--brand-dark"],
+  [style*="background-color: var(--brand-dark"]
+) {
+  background-image:
+    radial-gradient(1100px 420px at 8% -20%, rgb(255 60 172 / 0.2), transparent 60%),
+    radial-gradient(900px 420px at 100% 120%, rgb(0 200 255 / 0.16), transparent 60%),
+    radial-gradient(700px 360px at 55% 130%, rgb(123 47 247 / 0.22), transparent 65%);
+}
+
+/* Titles: holo gradient type. Deep foil on light pages, bright foil on dark. */
+.nl-store[data-style="holo"] h1:not([class~="text-white"]) {
+  background-image: var(--holo-deep);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.nl-store[data-style="holo"] :is(
+  h1[class~="text-white"],
+  h3.nl-display,
+  :is(
+    [class~="bg-[var(--brand-surface)]"],
+    [style*="background-color:var(--brand-surface"],
+    [style*="background-color: var(--brand-surface"]
+  ) :is(h1, h2)
+) {
+  background-image: linear-gradient(100deg, #ffe14d, #ff6fd8 35%, #b388ff 62%, #5ce1ff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Header: a live holo line along the bottom edge, and a glowing logo. */
+.nl-store[data-style="holo"] .nl-header {
+  border-bottom-color: transparent;
+}
+.nl-store[data-style="holo"] .nl-header::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  background-image: var(--holo-bright);
+  background-size: 300% 100%;
+  animation: nl-holo-shift 6s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+.nl-store[data-style="holo"] .nl-logo img {
+  animation: nl-logo-glow 3.5s ease-in-out infinite alternate;
+}
+
+/* Product cards: lift with a holo rim on hover. */
+.nl-store[data-style="holo"] .nl-card {
+  transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+}
+.nl-store[data-style="holo"] .nl-card:hover {
+  transform: translateY(-4px);
+  border-color: transparent;
+  box-shadow:
+    0 0 0 1.5px rgb(255 60 172 / 0.5),
+    0 18px 40px -16px rgb(123 47 247 / 0.45),
+    0 10px 26px -18px rgb(0 200 255 / 0.5);
+}
+
+/* Bundle & Save (ProductBuyPanel): the chosen card lifts; in holo it gets a foil rim. */
+.nl-store .nl-tier-active {
+  box-shadow: 0 14px 32px -22px rgb(var(--brand-rgb) / 0.9);
+}
+.nl-store[data-style="holo"] .nl-tier-active {
+  border-color: transparent;
+  background: linear-gradient(#fff, #fff) padding-box, var(--holo-deep) border-box;
+  box-shadow: 0 14px 32px -20px rgb(123 47 247 / 0.55), 0 8px 22px -18px rgb(0 150 224 / 0.5);
+}
+.nl-store[data-style="holo"] .nl-tier-active .nl-tier-dot {
+  border-color: #7b2ff7;
+}
+/*
+ * The chosen card keeps breathing - a soft ring swells out and fades - and its
+ * dot pings, so the selected bundle catches the eye. Brand colour by default,
+ * foil violet in holo. Stopped for reduced motion further down.
+ */
+.nl-store .nl-tier-active {
+  --nl-tier-glow: var(--brand-rgb);
+  animation: nl-tier-breathe 2.4s ease-in-out infinite;
+}
+.nl-store[data-style="holo"] .nl-tier-active {
+  --nl-tier-glow: 123 47 247;
+}
+.nl-store .nl-tier-active .nl-tier-dot {
+  position: relative;
+}
+.nl-store .nl-tier-active .nl-tier-dot::after {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border-radius: 9999px;
+  border: 2px solid rgb(var(--nl-tier-glow) / 0.55);
+  animation: nl-tier-ping 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+  pointer-events: none;
+}
+@keyframes nl-tier-breathe {
+  0%,
+  100% {
+    box-shadow: 0 14px 32px -22px rgb(var(--nl-tier-glow) / 0.9), 0 0 0 0 rgb(var(--nl-tier-glow) / 0.35);
+  }
+  60% {
+    box-shadow: 0 18px 38px -20px rgb(var(--nl-tier-glow) / 0.95), 0 0 0 8px rgb(var(--nl-tier-glow) / 0);
+  }
+}
+@keyframes nl-tier-ping {
+  0% {
+    transform: scale(0.7);
+    opacity: 0.9;
+  }
+  80%,
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .nl-store .nl-tier-active {
+    animation: none;
+  }
+  .nl-store .nl-tier-active .nl-tier-dot::after {
+    animation: none;
+    display: none;
+  }
+}
+
+/* Breadcrumbs (components/store/Breadcrumbs): foil rim and foil current page in holo. */
+.nl-store[data-style="holo"] .nl-crumbs ol {
+  border-color: transparent;
+  background: linear-gradient(#fff, #fff) padding-box, var(--holo-deep) border-box;
+}
+.nl-store[data-style="holo"] .nl-crumbs [aria-current="page"] {
+  background: rgb(123 47 247 / 0.08);
+}
+.nl-store[data-style="holo"] .nl-crumbs [aria-current="page"] .nl-crumbs-text {
+  background-image: var(--holo-deep);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.nl-store[data-style="holo"] ::selection {
+  background: #ff3cac;
+  color: #fff;
+}
+
+/* Visitors who ask their OS for less motion get the look without the movement. */
+@media (prefers-reduced-motion: reduce) {
+  .nl-store[data-style="holo"] :is(
+    [class~="bg-[var(--brand-highlight)]"],
+    [style*="background-color:var(--brand-highlight"],
+    [style*="background-color: var(--brand-highlight"],
+    [class~="bg-[var(--brand)]"],
+    [class~="bg-[#C4123F]"],
+    .nl-logo img
+  ),
+  .nl-store[data-style="holo"] .nl-header::after {
+    animation: none;
+  }
+  .nl-store[data-style="holo"] .nl-card:hover {
+    transform: none;
+  }
+}
+
+/*
+ * Footer: a clearly visible logo-colour gradient over the ink - magenta from
+ * the top-left, violet through the middle, cyan from the bottom-right - with
+ * the same live foil line along its top edge as the header has along its
+ * bottom. Violet and the base follow the saved brand colours. Declared after
+ * the generic dark-panel glow so it replaces it on the footer.
+ */
+.nl-store[data-style="holo"] footer.nl-footer {
+  position: relative;
+  border-top-color: transparent;
+  /* Plain #000000 (user request, 2026-10-10) - the colour gradient that used
+     to sit here is gone; the foil line along the top edge stays. */
+  background-image: none;
+}
+.nl-store[data-style="holo"] footer.nl-footer::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 2px;
+  background-image: var(--holo-bright);
+  background-size: 300% 100%;
+  animation: nl-holo-shift 6s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .nl-store[data-style="holo"] footer.nl-footer::before {
+    animation: none;
+  }
+}
+
+/* =========================================================================
+ * Home hero slider (HeroSlider.tsx).
+ *
+ * Deliberately restrained: the copy rises in line by line, the open photo
+ * settles with a slow zoom, and a thin bar counts down to the next slide.
+ * The progress bar shows in both storefront styles; the motion is the
+ * holographic style only, and none of it runs for reduced motion.
+ * ========================================================================= */
+
+@keyframes nl-hero-progress {
+  to { width: 100%; }
+}
+.nl-store .nl-hero-progress {
+  z-index: 2;
+  width: 0;
+  background-color: var(--brand-highlight);
+  animation-name: nl-hero-progress;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+
+@keyframes nl-hero-rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes nl-kenburns {
+  from { transform: scale(1.06); }
+  to { transform: scale(1); }
+}
+
+/* The block itself stays put; its lines stagger in instead. */
+.nl-store[data-style="holo"] .nl-hero-copy {
+  animation: none;
+}
+.nl-store[data-style="holo"] .nl-hero-copy > * {
+  animation: nl-hero-rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+/* The button keeps its foil drift alongside the rise. */
+.nl-store[data-style="holo"] .nl-hero-copy > .nl-hero-cta {
+  animation:
+    nl-hero-rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) both,
+    nl-holo-shift 6s ease-in-out infinite alternate;
+}
+.nl-store[data-style="holo"] .nl-hero-copy > :nth-child(2) { animation-delay: 0.08s; }
+.nl-store[data-style="holo"] .nl-hero-copy > :nth-child(3) { animation-delay: 0.16s; }
+.nl-store[data-style="holo"] .nl-hero-copy > :nth-child(4) { animation-delay: 0.24s; }
+/*
+ * The first slide on page load (data-still) is painted in place with no rise, so
+ * the headline counts as the page's Largest Contentful Paint. Later slides still
+ * animate in. The CTA keeps its foil drift either way.
+ */
+.nl-store[data-style="holo"] .nl-hero-copy[data-still] > * {
+  animation: none;
+}
+.nl-store[data-style="holo"] .nl-hero-copy[data-still] > .nl-hero-cta {
+  animation: nl-holo-shift 6s ease-in-out infinite alternate;
+}
+
+.nl-store[data-style="holo"] .nl-kenburns {
+  animation: nl-kenburns 7s ease-out both;
+}
+.nl-store[data-style="holo"] .nl-hero-progress {
+  background-image: var(--holo-bright);
+  background-size: 200% 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nl-store .nl-hero-copy > *,
+  .nl-store .nl-kenburns {
+    animation: none !important;
+  }
+}
+
+/* =========================================================================
+ * Chat button glow + the waving assistant robot (ContactFab / WaveBot).
+ *
+ * The button's attention ping had stopped: the foil rule gives every
+ * highlight-coloured element its own animation, which replaced Tailwind's
+ * animate-ping. These rules run both - the foil drift and the ping - and add
+ * a soft breathing halo in the logo colours.
+ * ========================================================================= */
+
+@keyframes nl-fab-glow {
+  0%, 100% {
+    box-shadow:
+      0 0 0 0 rgb(255 60 172 / 0.45),
+      0 0 16px 2px rgb(179 136 255 / 0.45),
+      0 12px 26px -10px rgb(13 10 28 / 0.45);
+  }
+  50% {
+    box-shadow:
+      0 0 0 9px rgb(255 60 172 / 0),
+      0 0 30px 8px rgb(92 225 255 / 0.55),
+      0 12px 26px -10px rgb(13 10 28 / 0.45);
+  }
+}
+.nl-store[data-style="holo"] .nl-fab {
+  animation:
+    nl-holo-shift 6s ease-in-out infinite alternate,
+    nl-fab-glow 2.6s ease-in-out infinite;
+}
+.nl-store[data-style="holo"] .nl-fab-ping {
+  animation: ping 1.6s cubic-bezier(0, 0, 0.2, 1) infinite;
+  opacity: 0.35;
+}
+
+/* Robot: arrives, bobs gently, waves in bursts, blinks, antenna glows. */
+@keyframes nl-bot-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.92); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes nl-bot-wave {
+  0%, 55%, 100% { transform: rotate(0deg); }
+  62% { transform: rotate(24deg); }
+  69% { transform: rotate(-10deg); }
+  76% { transform: rotate(24deg); }
+  83% { transform: rotate(-10deg); }
+  90% { transform: rotate(0deg); }
+}
+@keyframes nl-bot-blink {
+  0%, 90%, 100% { transform: scaleY(1); }
+  94% { transform: scaleY(0.12); }
+}
+/* The antenna used to pulse hot pink, from the old foil robot. It glows in
+   the brand colour now, like the rest of it. */
+/* The purchase notice's countdown line. */
+@keyframes nl-pop-timer {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
+}
+@keyframes nl-bot-antenna {
+  from { opacity: 0.6; filter: drop-shadow(0 0 0 rgb(var(--brand-light-rgb) / 0)); }
+  to { opacity: 1; filter: drop-shadow(0 0 5px rgb(var(--brand-light-rgb) / 0.95)); }
+}
+
+.nl-store .nl-bot {
+  animation: nl-bot-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.nl-store .nl-bot-figure {
+  position: relative;
+  isolation: isolate;
+  /* No CSS bob: the robot artwork is an animation of its own (head tilt,
+     sway), and a second motion on top of it read as jitter. */
+  filter: drop-shadow(0 8px 12px rgb(123 47 247 / 0.35));
+  transition: transform 0.2s ease;
+}
+/* The glow behind the robot, in two layers so it is unmistakably moving:
+   a halo that breathes (::after) and a ring that swells out of it and fades,
+   like a pulse (::before). Both sit behind the figure. */
+/* The store logo on the chat button is a still picture, so it floats. */
+@keyframes nl-bot-float {
+  from { transform: translateY(0); }
+  to { transform: translateY(-3px); }
+}
+.nl-store .nl-bot-logo {
+  animation: nl-bot-float 1.8s ease-in-out infinite alternate;
+}
+@media (prefers-reduced-motion: reduce) {
+  .nl-store .nl-bot-logo { animation: none; }
+}
+.nl-store .nl-bot-figure::before,
+.nl-store .nl-bot-figure::after {
+  content: "";
+  position: absolute;
+  inset: -22%;
+  z-index: -1;
+  border-radius: 50%;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+.nl-store .nl-bot-figure::after {
+  background: radial-gradient(
+    circle,
+    rgb(var(--brand-rgb) / 0.75) 0%,
+    rgb(var(--brand-rgb) / 0.35) 40%,
+    rgb(var(--brand-rgb) / 0) 70%
+  );
+  filter: blur(10px);
+  animation: nl-bot-breathe 1.6s ease-in-out infinite alternate;
+}
+.nl-store .nl-bot-figure::before {
+  background: radial-gradient(
+    circle,
+    rgb(var(--brand-rgb) / 0) 52%,
+    rgb(var(--brand-rgb) / 0.55) 62%,
+    rgb(var(--brand-rgb) / 0) 74%
+  );
+  animation: nl-bot-pulse 2.2s ease-out infinite;
+}
+@keyframes nl-bot-breathe {
+  from {
+    opacity: 0.55;
+    transform: scale(0.85);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1.25);
+  }
+}
+@keyframes nl-bot-pulse {
+  0% {
+    opacity: 0.9;
+    transform: scale(0.7);
+  }
+  70% {
+    opacity: 0;
+    transform: scale(1.9);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.9);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* Still alive, but only a slow fade - no swelling ring. */
+  .nl-store .nl-bot-figure::before {
+    animation: none;
+    opacity: 0;
+  }
+  .nl-store .nl-bot-figure::after {
+    animation: nl-bot-breathe 3.5s ease-in-out infinite alternate;
+    transform: none;
+  }
+}
+.nl-store .nl-bot-figure:hover {
+  transform: scale(1.06);
+}
+.nl-store .nl-bot-arm {
+  transform-origin: 48px 50px;
+  animation: nl-bot-wave 3.2s ease-in-out infinite;
+}
+.nl-store .nl-bot-eyes {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: nl-bot-blink 4.5s ease-in-out infinite;
+}
+.nl-store .nl-bot-antenna {
+  animation: nl-bot-antenna 1.2s ease-in-out infinite alternate;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nl-store[data-style="holo"] .nl-fab,
+  .nl-store[data-style="holo"] .nl-fab-ping,
+  .nl-store .nl-bot,
+  .nl-store .nl-bot-figure,
+  .nl-store .nl-bot-arm,
+  .nl-store .nl-bot-eyes,
+  .nl-store .nl-bot-antenna {
+    animation: none !important;
+  }
+}
+
+/* ============================================================================
+ * Admin theme — black rail, purple accent, white surfaces (matches the shop)
+ *
+ * The admin was built on Tailwind's `slate` ramp: roughly 3,200 utility usages
+ * across 89 screens. Tailwind v4 compiles those to `color: var(--color-slate-500)`
+ * and friends, so redefining the ramp inside `[data-admin]` restyles every one
+ * of them without touching a page. Semantic colours (emerald / amber / red) are
+ * left alone so "paid", "pending" and "failed" keep meaning what they did.
+ *
+ * The ramp below is tinted toward the rail's violet rather than left neutral -
+ * that is what makes the canvas read as part of the same design instead of a
+ * grey page with a coloured edge attached.
+ * ==========================================================================*/
+[data-admin] {
+  --color-slate-50: #faf9fc;
+  --color-slate-100: #f2f0f7;
+  --color-slate-200: #e7e4ef;
+  --color-slate-300: #d2cddf;
+  --color-slate-400: #9b93ad;
+  --color-slate-500: #655d78;
+  --color-slate-600: #514a62;
+  --color-slate-700: #3f394e;
+  --color-slate-800: #282335;
+  --color-slate-900: #191426;
+  --color-slate-950: #0f0b18;
+
+  /* Surfaces: cards sit above the canvas, insets below it. */
+  --admin-canvas: #f5f3f9;
+  --admin-surface: #ffffff;
+  --admin-inset: #faf9fc;
+
+  --admin-line: #e5e1ee;
+  --admin-line-strong: #d8d3e6;
+  --admin-shadow: 0 1px 2px rgba(25, 20, 38, 0.04);
+  --admin-shadow-lg: 0 2px 4px rgba(25, 20, 38, 0.05), 0 10px 28px -10px rgba(25, 20, 38, 0.18);
+
+  --admin-radius: 14px;
+  --admin-radius-sm: 10px;
+
+  /* Ink that sits on a coloured fill - a button, the rail, a gradient tile.
+     Held apart from --color-white because the dark scheme turns that into a
+     surface colour, and these labels must stay light either way. */
+  --on-colour: #ffffff;
+
+  /* Primary button. Its own pair rather than the raw accent, because dark
+     inverts it: a saturated fill that carries a page in light looks like a
+     stray highlight against near-black panels. */
+  --admin-btn: var(--admin-accent);
+  --admin-btn-ink: #ffffff;
+
+  /* The rail's own scale, derived from whatever colour the shop has set. */
+  --rail-line: rgba(255, 255, 255, 0.08);
+  --rail-text: rgba(255, 255, 255, 0.70);
+  --rail-label: rgba(255, 255, 255, 0.42);
+  --rail-hover: rgba(255, 255, 255, 0.07);
+  /* The connector line down an open nav group. Needs to be clearly visible,
+     not a hairline: it is what ties children back to their parent. */
+  --rail-rule: rgba(255, 255, 255, 0.22);
+
+  background-color: var(--admin-canvas);
+  font-family: var(--font-admin), ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Headings and figures only - body text stays on the interface face. */
+[data-admin] .adm-display {
+  font-family: var(--font-admin-display), var(--font-admin), ui-sans-serif, sans-serif;
+  letter-spacing: -0.02em;
+}
+
+/* ---------- the rail ---------- */
+[data-admin] .adm-rail {
+  background-color: var(--admin-sidebar);
+  border-right: 1px solid var(--rail-line);
+}
+[data-admin] .adm-rail-label { color: var(--rail-label); }
+
+[data-admin] .adm-rail-item {
+  color: var(--rail-text);
+}
+[data-admin] .adm-rail-item:hover {
+  background-color: var(--rail-hover);
+  color: #fff;
+}
+[data-admin] .adm-rail-item[data-active="true"] {
+  background-color: var(--admin-accent);
+  color: #fff;
+}
+/* A child sits under its parent on a hairline rail, so it brightens instead of
+   taking a second filled pill - two solid pills in one group read as two
+   separate current pages. */
+[data-admin] .adm-rail-sub[data-active="true"] {
+  background-color: var(--rail-hover);
+  color: #fff;
+}
+
+/* ---------- one focus ring for every control ---------- */
+[data-admin] .adm-focus:focus-visible {
+  outline: none;
+  border-color: var(--admin-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--admin-accent) 20%, transparent);
+}
+[data-admin] .adm-rail .adm-focus:focus-visible {
+  border-color: transparent;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.55);
+}
+
+
+/* ============================================================================
+ * Admin theme — "Carbon" (opt-in dark)
+ *
+ * Selected in Settings → Appearance, not by the OS: a shop that works in a lit
+ * room should not get a dark admin because someone's laptop is in dark mode.
+ *
+ * It costs this little because the admin already draws everything through
+ * tokens. `bg-white` compiles to `var(--color-white)`, so pointing that at a
+ * panel colour flips 179 hardcoded surfaces at once; the slate ramp is
+ * reversed so 900 (headings) becomes the lightest step and 50 (subtle fills)
+ * the darkest. White-on-colour text is on its own --on-colour token and is
+ * left alone.
+ * ==========================================================================*/
+[data-admin][data-scheme="dark"] {
+  --color-white: #1b1f24;          /* every `bg-white` card and panel */
+
+  --color-slate-50: #23282e;
+  --color-slate-100: #2a3037;
+  --color-slate-200: #333a42;
+  --color-slate-300: #454d57;
+  --color-slate-400: #8d97a3;
+  --color-slate-500: #a7b1bd;
+  --color-slate-600: #bcc5cf;
+  --color-slate-700: #d2d9e1;
+  --color-slate-800: #e6ebf0;
+  --color-slate-900: #f2f5f8;
+  --color-slate-950: #ffffff;
+
+  --admin-canvas: #14171a;
+  --admin-surface: #1b1f24;
+  --admin-inset: #22272d;
+
+  --admin-line: #2f363d;
+  --admin-line-strong: #3c444d;
+  --admin-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --admin-shadow-lg: 0 2px 4px rgba(0, 0, 0, 0.4), 0 12px 32px -10px rgba(0, 0, 0, 0.6);
+
+  --rail-line: rgba(255, 255, 255, 0.07);
+  --rail-text: rgba(255, 255, 255, 0.66);
+  --rail-label: rgba(255, 255, 255, 0.36);
+  --rail-hover: rgba(255, 255, 255, 0.06);
+  --rail-rule: rgba(255, 255, 255, 0.20);
+
+  /* Buttons go near-white on dark, the way the reference does it. */
+  --admin-btn: #f2f5f8;
+  --admin-btn-ink: #14171a;
+}
+
+/* The current page is a filled pale pill with dark ink - the same treatment as
+   a primary button in this scheme, so "the thing you are on" and "the thing
+   that acts" read as one family. A saturated accent pill was wrong here: the
+   rail is neutral, so it was the only coloured block on the page. */
+[data-admin][data-scheme="dark"] .adm-rail-item[data-active="true"] {
+  background-color: var(--admin-btn);
+  color: var(--admin-btn-ink);
+  box-shadow: none;
+}
+[data-admin][data-scheme="dark"] .adm-rail-item[data-active="true"]:hover {
+  background-color: var(--admin-btn);
+  color: var(--admin-btn-ink);
+  filter: brightness(0.96);
+}
+/* A child of an open group stays subtle - two pale pills in one group would
+   read as two current pages. */
+[data-admin][data-scheme="dark"] .adm-rail-sub[data-active="true"] {
+  background-color: rgba(255, 255, 255, 0.10);
+  color: #fff;
+}
+
+/*
+ * Status chips are the one place the ramp cannot carry on its own: the 50-step
+ * fills are near-white by design, so on a dark panel "paid" and "pending" both
+ * come out as bright blocks. Re-tinted to dark washes that keep their hue.
+ */
+[data-admin][data-scheme="dark"] .bg-emerald-50 { background-color: #14342a; }
+[data-admin][data-scheme="dark"] .text-emerald-700,
+[data-admin][data-scheme="dark"] .text-emerald-800 { color: #62d0a4; }
+[data-admin][data-scheme="dark"] .border-emerald-200 { border-color: #1f5a46; }
+[data-admin][data-scheme="dark"] .bg-amber-50 { background-color: #3a2c10; }
+[data-admin][data-scheme="dark"] .text-amber-700,
+[data-admin][data-scheme="dark"] .text-amber-800 { color: #e3b451; }
+[data-admin][data-scheme="dark"] .border-amber-200 { border-color: #5d4718; }
+[data-admin][data-scheme="dark"] .bg-red-50 { background-color: #3a1d1c; }
+[data-admin][data-scheme="dark"] .text-red-600,
+[data-admin][data-scheme="dark"] .text-red-700 { color: #ef8b85; }
+[data-admin][data-scheme="dark"] .border-red-200 { border-color: #60302d; }
+
+
+/* Arbitrary pastel fills used for section and badge grounds. They are close to
+   white, so on a dark panel each one reads as a lit block; these swap in a
+   dark wash of the same hue. Light mode is untouched. */
+[data-admin][data-scheme="dark"] .bg-\[\#E2EEEA\] { background-color: #17332c; }
+[data-admin][data-scheme="dark"] .bg-\[\#E3EAF3\] { background-color: #1d2733; }
+[data-admin][data-scheme="dark"] .bg-\[\#F5EDDA\] { background-color: #332c19; }
+[data-admin][data-scheme="dark"] .bg-\[\#E4EEDE\] { background-color: #1e3020; }
+[data-admin][data-scheme="dark"] .bg-\[\#F6E6DB\] { background-color: #33271e; }
+[data-admin][data-scheme="dark"] .bg-\[\#F4E2E8\] { background-color: #33222a; }
+[data-admin][data-scheme="dark"] .bg-\[\#F2E4CC\] { background-color: #332a1b; }
+[data-admin][data-scheme="dark"] .bg-\[\#DEEAF4\] { background-color: #1c2a35; }
+[data-admin][data-scheme="dark"] .bg-\[\#FBEFB9\] { background-color: #342f17; }
+[data-admin][data-scheme="dark"] .bg-\[\#F1F4F7\] { background-color: #1b1f24; }
+
+
+/* ---------------------------------------------------------------------------
+ * Carbon: decorative accent is muted.
+ *
+ * In light, accent text and hairlines read as quiet emphasis. Against
+ * near-black they are the brightest thing on the page, and since the shop can
+ * set any accent it likes (an indigo preset, say) the result was "blue
+ * everywhere" - status pills, inline links, the little glyphs inside inputs.
+ *
+ * These two rules neutralise the accent wherever it is only decoration. The
+ * accent is deliberately still used where it means something and those places
+ * are defined elsewhere, so they are unaffected:
+ *   - the current page, as the inset edge on .adm-rail-item[data-active]
+ *   - keyboard focus, via .adm-focus
+ *   - filled buttons, which run on --admin-btn
+ * ------------------------------------------------------------------------ */
+[data-admin][data-scheme="dark"] .text-\[var\(--admin-accent\)\] {
+  color: var(--color-slate-800);
+}
+[data-admin][data-scheme="dark"] .border-\[var\(--admin-accent\)\] {
+  border-color: var(--admin-line-strong);
+}
+[data-admin][data-scheme="dark"] .ring-\[var\(--admin-accent\)\] {
+  --tw-ring-color: var(--admin-line-strong);
+}
+/* Soft accent washes (bg-[var(--admin-accent)]/5 and friends) become a plain
+   raised surface; a tinted wash of a saturated hue muddies a dark panel. */
+[data-admin][data-scheme="dark"] [class*="bg-\[var\(--admin-accent\)\]\/"] {
+  background-color: var(--admin-inset);
+}
+/* accent-color drives native checkboxes and radios - keep those neutral too. */
+[data-admin][data-scheme="dark"] .accent-\[var\(--admin-accent\)\] {
+  accent-color: var(--color-slate-600);
+}
+
+/* ---------------------------------------------------------------------------
+   Header: the top of the hero panel, pinned only once the page has scrolled.
+   --------------------------------------------------------------------------- */
+
+
+/* The hero is pulled up under the header so the bar floats over the top of
+   the photograph, and the copy block reserves the bar's height. */
+
+/* The showcase hero's own faces: a geometric bold for the headline and the
+   badge figure, a brush script for the accent word. Fixed rather than taken
+   from the heading-font setting, because the reference depends on this pair. */
+/* The class is doubled to reach (0,3,0): the storefront's heading-font rule
+   (`.nl-store :is(h1,...,.nl-display)`) is (0,2,0) AND is injected inline
+   after this sheet, so an equal-specificity rule here loses to it and the
+   hero's h1 ends up in whatever face Settings chose, pinned to weight 400. */
+.nl-store .nl-hero-headline.nl-hero-headline {
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-synthesis: none;
+}
+/* The showcase hero's serif headline. Doubled for the same reason as above. */
+/* One family for the whole storefront (2026-10-01). .nl-hero-serif is kept as
+   a *size and weight* hook - it is used on dozens of headings - but it no
+   longer swaps in a second typeface. */
+.nl-store .nl-hero-serif.nl-hero-serif {
+  font-family: var(--font-sans);
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+/* Main headings and the hero headline in Cormorant Garamond (2026-10-21,
+   user request; it replaced Nosifer). Page and section titles, the hero's
+   eyebrow and headline, and the Spin & Win popup's heading (which sits
+   outside <main>) - product names (h3), prices, body text and buttons stay
+   in the body face.
+   The class is tripled to reach (0,3,2): it must beat the doubled
+   .nl-hero-serif rule above (0,3,0) and the inline heading-font rule (0,2,0)
+   that Settings > Fonts injects after this sheet. */
+.nl-store.nl-store.nl-store main :is(h1, h2),
+.nl-store.nl-store.nl-store .nl-hero [data-hero="eyebrow"],
+.nl-store.nl-store.nl-store .nl-spin-title {
+  font-family: var(--font-cormorant), serif;
+  font-style: italic; /* user request, 2026-10-21 */
+  font-weight: 600;
+  letter-spacing: 0;
+}
+/* Heading size 3rem (user request, 2026-10-21); 2.25rem on phones so long
+   titles don't break into four lines. The hero eyebrow is a small label, so
+   it keeps its own size; the classic hero's h1 sets its own (larger) size
+   inline and is left alone. */
+.nl-store.nl-store.nl-store main :is(h1, h2),
+.nl-store.nl-store.nl-store .nl-spin-title {
+  font-size: 2.25rem;
+  line-height: 1.1;
+}
+@media (min-width: 640px) {
+  .nl-store.nl-store.nl-store main :is(h1, h2),
+  .nl-store.nl-store.nl-store .nl-spin-title {
+    font-size: 3rem;
+  }
+}
+
+/* The accent word was a script face; one family for the whole storefront means
+   it is the body face too, set apart by weight rather than by typeface. */
+/* The product page's policy tabs: a heading, then the lines under it. The
+   prose rules size body copy but leave h3 at the theme's display size, which
+   is too loud for a column of shipping notes. */
+.nl-store .nl-policy h3 {
+  font-size: 20px;
+  line-height: 1.3;
+  font-weight: 700;
+  color: rgb(15 23 42);
+  margin-bottom: 0.75rem;
+}
+.nl-store .nl-policy p {
+  margin-bottom: 0.4rem;
+}
+
+.nl-store .nl-hero-accent.nl-hero-accent {
+  font-family: var(--font-sans);
+  font-weight: 700;
+}
+
+/* The promise band takes the page's 40px rhythm like every other section -
+   except where it is meant to read as part of something: straight under the
+   hero, or as the last thing before the footer. */
+.nl-hero + .nl-usp-band {
+  margin-top: 0;
+}
+main > .nl-usp-band:last-child {
+  margin-bottom: 0;
+}
+
+/* CopyValue on the dark ticket: the value is set in slate for white pages, so
+   on the dark stock it has to be lifted to white, and the copy button with it. */
+.nl-ticket-copy > * {
+  color: #ffffff;
+}
+.nl-ticket-copy span,
+.nl-ticket-copy button {
+  color: #ffffff;
+}
+.nl-ticket-copy button {
+  border-color: rgb(255 255 255 / 0.25);
+}
+
+/* The promo banner's drifting strip of hollow words. */
+.nl-marquee-track {
+  animation: nl-marquee 34s linear infinite;
+}
+@keyframes nl-marquee {
+  to {
+    transform: translateX(-50%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .nl-marquee-track {
+    animation: none;
+  }
+}
+.nl-outline-word {
+  color: transparent;
+  -webkit-text-stroke: 1px rgb(255 255 255 / 0.75);
+  letter-spacing: 0.01em;
+}
+
+.nl-logo-img {
+  /* A width set in Settings arrives as --nl-logo-w and the height follows the
+     picture's proportions; with none set the mark is sized by height. */
+  width: var(--nl-logo-w, auto);
+  height: var(--nl-logo-h, 40px);
+  transition: width 0.2s ease-out, height 0.2s ease-out, max-height 0.2s ease-out;
+}
+
+/* Pinned state. Full-bleed, square, condensed, and it drops in rather than
+   appearing, so the switch from in-flow to fixed is not a jump cut. */
+.nl-stuck {
+  position: fixed;
+  inset-inline: 0;
+  top: 0;
+  z-index: 50;
+  animation: nl-drop 0.28s ease-out;
+}
+/* Banner homepage: the header sits over the banner, see-through, until the
+   page is scrolled (StickyHeader sets body[data-scrolled] past 160px) - then
+   it is the normal black bar again, pinned or not. Scoped with :has() to the
+   page carrying [data-banner-home], so no other page is touched, and done in
+   CSS so there is no flash on load. The banner is pulled up by the header's
+   height (68px / 88px + its 1px rule); FitToWindow then measures from its new
+   top and fills the screen. (user request, 2026-10-21) */
+.nl-store:has([data-banner-home]) .nl-header {
+  transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+body:not([data-scrolled]) .nl-store:has([data-banner-home]) :not(.nl-stuck) > .nl-header {
+  background-color: transparent !important;
+  border-color: transparent;
+}
+.nl-store:has([data-banner-home]) main [data-fit-window] {
+  margin-top: -69px;
+}
+@media (min-width: 640px) {
+  .nl-store:has([data-banner-home]) main [data-fit-window] {
+    margin-top: -89px;
+  }
+}
+/* A black shade from the top of the banner down, so the see-through header's
+   menu and icons read on a busy picture; it fades out well above the centre
+   button (user request, 2026-10-21). */
+.nl-store:has([data-banner-home]) main [data-fit-window] {
+  position: relative;
+}
+.nl-store:has([data-banner-home]) main [data-fit-window]::after {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: clamp(170px, 30%, 280px);
+  background: linear-gradient(
+    to bottom,
+    rgb(0 0 0 / 0.75) 0%,
+    rgb(0 0 0 / 0.45) 45%,
+    rgb(0 0 0 / 0) 100%
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+/* Fixed-background banners (data-parallax="fixed"): the band's picture is
+   pinned to the window and the band is a window onto it, so the page scrolls
+   over a still picture. Done with clip-path + position: fixed rather than
+   background-attachment: fixed, which iOS Safari ignores. The picture is the
+   band's own first <img> (next/image "fill", hence !important over its
+   inline position). (user request, 2026-10-21) */
+.nl-store [data-parallax="fixed"] {
+  clip-path: inset(0);
+}
+.nl-store [data-parallax="fixed"] > img:first-of-type {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  object-fit: cover;
+}
+.nl-stuck .nl-header {
+  box-shadow: 0 10px 30px -18px rgb(15 23 42 / 0.4);
+}
+.nl-stuck .nl-headrow {
+  height: 68px;
+}
+.nl-stuck .nl-logo-img {
+  width: var(--nl-logo-w-pin, auto);
+  height: var(--nl-logo-h-pin, 34px);
+  /* Whatever the shop set, it has to sit inside the slim bar. */
+  max-height: 60px;
+}
+
+@keyframes nl-drop {
+  from {
+    transform: translateY(-100%);
+  }
+  to {
+    transform: none;
+  }
+}
+
+/* Left rail, once the hero has scrolled away: the fillets have nothing to be
+   cut into any more, so they go, and the rail becomes a floating card that
+   still reads against a white page. */
+body[data-scrolled] .nl-rail-fillet {
+  opacity: 0;
+}
+body[data-scrolled] .nl-rail-body {
+  border-radius: 18px;
+  box-shadow: 0 14px 34px -14px rgb(15 23 42 / 0.32);
+}
+.nl-rail-fillet {
+  transition: opacity 0.2s ease-out;
+}
+.nl-rail-body {
+  transition: border-radius 0.2s ease-out, box-shadow 0.2s ease-out;
+}
+
+/* ---------------------------------------------------------------------------
+   Showcase hero: the glow behind the floating product.
+
+   Every layer is decoration and every one of them stops under
+   prefers-reduced-motion (the markup also carries motion-reduce:animate-none,
+   which covers the utilities; this covers the rest).
+   --------------------------------------------------------------------------- */
+.nl-hero-stage {
+  isolation: isolate;
+}
+
+.nl-glow {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  border-radius: 9999px;
+  pointer-events: none;
+  z-index: 0;
+  filter: blur(46px);
+  will-change: transform, opacity;
+}
+
+/* The main halo directly behind the product. */
+.nl-glow-halo {
+  width: 62%;
+  height: 62%;
+  background: radial-gradient(
+    circle,
+    rgb(var(--brand-rgb) / 0.55) 0%,
+    rgb(var(--brand-light-rgb) / 0.3) 45%,
+    transparent 70%
+  );
+  animation: nl-halo 5.5s ease-in-out infinite;
+}
+
+/* Three drifting orbs, offset from the centre so the light moves around it. */
+.nl-glow-a {
+  width: 44%;
+  height: 44%;
+  margin: -28% 0 0 -38%;
+  background: radial-gradient(circle, rgb(var(--brand-rgb) / 0.5), transparent 68%);
+  animation: nl-drift-a 11s ease-in-out infinite;
+}
+.nl-glow-b {
+  width: 38%;
+  height: 38%;
+  margin: 6% 0 0 4%;
+  background: radial-gradient(circle, rgb(var(--brand-light-rgb) / 0.55), transparent 68%);
+  animation: nl-drift-b 13s ease-in-out infinite;
+}
+.nl-glow-c {
+  width: 32%;
+  height: 32%;
+  margin: 18% 0 0 -30%;
+  background: radial-gradient(circle, rgb(var(--brand-soft-rgb) / 0.75), transparent 70%);
+  animation: nl-drift-c 9s ease-in-out infinite;
+}
+
+/* A slowly turning conic sweep, clipped to a ring. */
+.nl-glow-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 74%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border-radius: 9999px;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.4;
+  filter: blur(22px);
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    rgb(var(--brand-light-rgb) / 0.75) 60deg,
+    transparent 150deg,
+    rgb(var(--brand-rgb) / 0.6) 240deg,
+    transparent 330deg
+  );
+  -webkit-mask: radial-gradient(circle, transparent 52%, #000 60%, #000 78%, transparent 86%);
+  mask: radial-gradient(circle, transparent 52%, #000 60%, #000 78%, transparent 86%);
+  animation: nl-ring 18s linear infinite;
+}
+
+.nl-hero-float {
+  animation: nl-float 6s ease-in-out infinite;
+  will-change: transform;
+}
+
+@keyframes nl-halo {
+  0%,
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 0.75;
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.16);
+    opacity: 1;
+  }
+}
+@keyframes nl-drift-a {
+  0%,
+  100% {
+    transform: translate(-50%, -50%);
+  }
+  50% {
+    transform: translate(calc(-50% + 46px), calc(-50% + 34px));
+  }
+}
+@keyframes nl-drift-b {
+  0%,
+  100% {
+    transform: translate(-50%, -50%);
+  }
+  50% {
+    transform: translate(calc(-50% - 52px), calc(-50% + 26px));
+  }
+}
+@keyframes nl-drift-c {
+  0%,
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+  }
+  50% {
+    transform: translate(calc(-50% + 30px), calc(-50% - 40px)) scale(1.2);
+  }
+}
+@keyframes nl-ring {
+  to {
+    transform: translate(-50%, -50%) rotate(360deg);
+  }
+}
+@keyframes nl-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-20px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nl-glow,
+  .nl-glow-ring,
+  .nl-hero-float {
+    animation: none !important;
+  }
+}
+
+/* The review bubbles' tail: a rotated square tucked under the foot of the
+   card, so the quote reads as something a person said. */
+.nl-bubble::after {
+  content: "";
+  position: absolute;
+  left: 34px;
+  bottom: -9px;
+  width: 22px;
+  height: 22px;
+  background: #fff;
+  border-radius: 4px;
+  transform: rotate(45deg);
+}
+
+/* Category index: the row's arrow fills with the brand colour on hover. */
+.group:hover .nl-cat-arrow {
+  background-color: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+}
+
+/* ---------------------------------------------------------------------------
+   Hover life.
+
+   The hero animations, the glows and the rest were switched off wholesale at
+   one point; that went further than asked. Only the scroll reveal was meant
+   to go, and it is gone for good - its observer, its CSS and its attributes
+   are all deleted, so nothing on a page waits for JavaScript to become
+   visible any more. Everything else animates as it did.
+   --------------------------------------------------------------------------- */
+
+/* Product cards lift, and their picture eases in behind the frame. The zoom
+   was on the image's own hover before, so it only fired when the cursor was
+   over the picture itself and not the rest of the card. */
+.nl-store .nl-card {
+  transition:
+    transform 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 0.35s ease;
+}
+@media (hover: hover) {
+  .nl-store .nl-card:hover {
+    transform: translateY(-6px);
+  }
+  .nl-store .nl-card:hover img {
+    transform: scale(1.06);
+  }
+}
+.nl-store .nl-card img {
+  transition: transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Buttons and links acknowledge the press. */
+.nl-store a,
+.nl-store button {
+  -webkit-tap-highlight-color: transparent;
+}
+.nl-store a:active,
+.nl-store button:active {
+  transform: translateY(1px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nl-store .nl-card,
+  .nl-store .nl-card img,
+  .nl-store a:active,
+  .nl-store button:active {
+    transition: none;
+    transform: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Inner pages.
+
+   Cart, checkout, account, blog, contact and the rest were built before the
+   home page was redesigned, and each one carries its own hand-written
+   utilities. Restyling twenty-nine files by hand would guarantee they drift
+   apart again, so the shared idioms are lifted here instead: page titles,
+   panels, form controls.
+
+   Everything is scoped to `.nl-store main` so the admin is untouched, and
+   anything already carrying `.nl-hero-serif` opts out — those are the blocks
+   that have been given a deliberate size already.
+   --------------------------------------------------------------------------- */
+
+/* ---- page titles ---- */
+.nl-store main h1:not(.nl-hero-serif):not([class*="text-["]) {
+  font-size: clamp(34px, 4.2vw, 46px);
+  line-height: 1.1;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+
+.nl-store main h2:not(.nl-hero-serif):not([class*="text-["]) {
+  font-size: clamp(22px, 2.4vw, 28px);
+  line-height: 1.2;
+  font-weight: 700;
+}
+
+/* ---- panels ----
+   The site's cards are soft-cornered with a hairline border and no heavy
+   shadow; these pages used a tighter radius and a darker line. */
+.nl-store main [class~="rounded-2xl"][class*="border-slate-200"],
+.nl-store main [class~="rounded-2xl"][class*="border-slate-100"] {
+  border-radius: 22px;
+  border-color: #E9E5F1;
+}
+
+.nl-store main [class~="rounded-xl"][class*="border-slate-200"] {
+  border-radius: 14px;
+  border-color: #E9E5F1;
+}
+
+/* ---- form controls ----
+   Targeted by element, not by class, so a field added later picks this up
+   without anyone remembering to. Checkboxes and radios keep their own size. */
+.nl-store main input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+.nl-store main select,
+.nl-store main textarea {
+  border-radius: 14px;
+  border-color: #E4DFEF;
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.nl-store main input:not([type="checkbox"]):not([type="radio"]):focus-visible,
+.nl-store main select:focus-visible,
+.nl-store main textarea:focus-visible {
+  outline: none;
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px rgb(var(--brand-rgb) / 0.14);
+}
+
+.nl-store main input[type="checkbox"],
+.nl-store main input[type="radio"] {
+  accent-color: var(--brand);
+}
+
+/* ---- the dashed "nothing here" panels ---- */
+.nl-store main [class*="border-dashed"] {
+  border-radius: 24px;
+  border-color: #DED8EC;
+}
+
+/* ---------------------------------------------------------------------------
+   Star rating input.
+
+   Five radios in a reversed row, so the general sibling selector can light
+   every star to the left of the one pressed. No JavaScript, and it still
+   posts a plain radio value.
+   --------------------------------------------------------------------------- */
+.nl-stars {
+  display: flex;
+  flex-direction: row-reverse;
+  justify-content: flex-end;
+}
+.nl-stars input:checked ~ label,
+.nl-stars label:hover,
+.nl-stars label:hover ~ label {
+  color: #f5a623;
+}
+.nl-stars input:focus-visible + label {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* ---------------------------------------------------------------------------
+   Body text size.
+
+   The shop was set in 14px and below almost everywhere - readable on a
+   designer's screen, small on a real one, and small enough that the serif
+   headings had nothing to sit against. Every size that carries actual
+   sentences goes up a step, with a little more line height so the longer
+   measures stay comfortable.
+
+   Done here rather than by editing several hundred class names: one place to
+   read, one place to tune, and the admin - which is a dense working tool and
+   wants to stay dense - is untouched because this is scoped to .nl-store.
+
+   Headings, numerals and the uppercase micro-labels are deliberately left
+   alone: they are already sized deliberately, and scaling them too would
+   just undo the hierarchy.
+   --------------------------------------------------------------------------- */
+.nl-store .text-sm {
+  font-size: 0.9375rem; /* 14 -> 15 */
+  line-height: 1.6;
+}
+.nl-store .text-base {
+  font-size: 1.0625rem; /* 16 -> 17 */
+  line-height: 1.65;
+}
+.nl-store .text-xs {
+  font-size: 0.8125rem; /* 12 -> 13 */
+  line-height: 1.55;
+}
+.nl-store .text-\[12px\],
+.nl-store .text-\[12\.5px\] {
+  font-size: 13px;
+  line-height: 1.55;
+}
+.nl-store .text-\[13px\] {
+  font-size: 14px;
+  line-height: 1.6;
+}
+.nl-store .text-\[14px\] {
+  font-size: 15px;
+  line-height: 1.6;
+}
+.nl-store .text-\[15px\] {
+  font-size: 16px;
+  line-height: 1.65;
+}
+.nl-store .text-\[16px\],
+.nl-store .text-\[17px\] {
+  font-size: 17.5px;
+  line-height: 1.65;
+}
+
+/* Long-form copy - a product description, a policy page, a blog post - gets
+   the most, because it is the only place people read more than a line. */
+.nl-store .nl-prose {
+  font-size: 1.0625rem;
+  line-height: 1.75;
+}
+
+/* ---------------------------------------------------------------------------
+ * Storefront motion (GSAP, components/store/StorefrontMotion.tsx).
+ *
+ * `nl-motion` is set on <html> before paint when motion is allowed. Until the
+ * controller takes over (`nl-motion-live`) the reveal targets stay hidden, so
+ * they never flash in and then vanish; if the script never runs, they appear
+ * after 2.5s regardless. Once live, the fallback must be off - a CSS
+ * animation would override GSAP's inline styles.
+ * ------------------------------------------------------------------------- */
+@keyframes nl-motion-fallback {
+  to { opacity: 1; visibility: visible; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  html.nl-motion:not(.nl-motion-live) .nl-store main section h2,
+  html.nl-motion:not(.nl-motion-live) .nl-store .nl-card,
+  html.nl-motion:not(.nl-motion-live) .nl-store [data-reveal],
+  html.nl-motion:not(.nl-motion-live) .nl-store [data-hero] {
+    opacity: 0;
+    animation: nl-motion-fallback 0.4s ease-out 2.5s forwards;
+  }
+  /* GSAP owns the card's hover now (a tilt); the CSS lift and its transform
+     transition would fight it. The picture's own zoom stays. */
+  html.nl-motion-live .nl-store .nl-card {
+    transition: box-shadow 0.35s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.35s ease;
+  }
+  html.nl-motion-live .nl-store .nl-card:hover {
+    transform: none;
+  }
+  /* The marquee is driven by GSAP so it can answer the scroll. */
+  html.nl-motion-live .nl-store .nl-marquee-track {
+    animation: none;
+  }
+}
+
+/* Hero copy: continuous touches, alongside the GSAP entrance. All off for
+   anyone who asks for reduced motion. */
+@media (prefers-reduced-motion: no-preference) {
+  /* A light sweeping across the accent word, over its own colour. */
+  .nl-store .nl-hero-shimmer {
+    background-image: linear-gradient(
+      110deg,
+      var(--accent) 0%,
+      var(--accent) 40%,
+      #ffffff 50%,
+      var(--accent) 60%,
+      var(--accent) 100%
+    );
+    background-size: 250% 100%;
+    background-position: 100% 0;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: nl-hero-shimmer 3.6s ease-in-out 1.6s infinite;
+  }
+  @keyframes nl-hero-shimmer {
+    0% { background-position: 100% 0; }
+    55%, 100% { background-position: -150% 0; }
+  }
+  /* The eyebrow's sparkle twinkles and turns. */
+  .nl-store .nl-hero-sparkle {
+    animation: nl-hero-sparkle 2.8s ease-in-out infinite;
+    transform-origin: center;
+  }
+  @keyframes nl-hero-sparkle {
+    0%, 100% { transform: rotate(0deg) scale(1); opacity: 1; }
+    50% { transform: rotate(90deg) scale(1.25); opacity: 0.7; }
+  }
+  /* The "play" before the second link pulses gently. */
+  .nl-store .nl-hero-play {
+    animation: nl-hero-play 1.8s ease-in-out infinite;
+    transform-origin: center;
+  }
+  @keyframes nl-hero-play {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.25); opacity: 0.75; }
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Printable documents (packing slip, invoice) are paper: black on white in
+ * every admin scheme. The dark schemes reverse the slate ramp and repaint
+ * --color-white, which turned slip text cream on a white page. Custom
+ * properties declared here win over the inherited dark ones.
+ * ------------------------------------------------------------------------ */
+[data-admin] .print-document {
+  --color-white: #ffffff;
+  --color-slate-50: #f6f6f6;
+  --color-slate-100: #eeeeee;
+  --color-slate-200: #dddddd;
+  --color-slate-300: #bbbbbb;
+  --color-slate-400: #444444;
+  --color-slate-500: #222222;
+  --color-slate-600: #111111;
+  --color-slate-700: #000000;
+  --color-slate-800: #000000;
+  --color-slate-900: #000000;
+  --color-slate-950: #000000;
+  background: #ffffff;
+  color: #000000;
+  color-scheme: light;
+}
+
+/*
+ * Bulk printing: many orders in one job, one per sheet. The outer
+ * .print-document stops being a page itself and each .print-sheet becomes
+ * one, starting on fresh paper, with the same padding and footer-at-bottom
+ * layout a single slip or invoice gets.
+ */
+@media print {
+  .print-document.print-batch {
+    padding: 0 !important;
+    display: block;
+    min-height: 0;
+  }
+  .print-batch .print-sheet {
+    margin: 0 !important;
+    padding: 14mm !important;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: none !important;
+    break-after: page;
+    page-break-after: always;
+  }
+  .print-batch .print-sheet:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+  .print-batch .print-sheet > * {
+    flex-shrink: 0;
+  }
+}

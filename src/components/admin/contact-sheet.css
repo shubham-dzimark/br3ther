@@ -1,0 +1,374 @@
+/*
+ * Br3thr admin: the Contact Sheet theme.
+ *
+ * A photographer's proof sheet: a film-black rail, a white sheet with
+ * hairlines on one grid, small mono edge codes for data, and red china-marker
+ * wax pencil reserved for what needs a person (the current page, focus, the
+ * one marked item). Dark is the negative of the same sheet.
+ *
+ * How it works: every admin screen is drawn with Tailwind's slate ramp, the
+ * status ramps (emerald / amber / red / rose / sky) and the --admin-* tokens.
+ * Tailwind v4 compiles those utilities to CSS variables, so redefining the
+ * variables here re-skins all screens without editing them. Every selector
+ * carries [data-admin][data-cs][data-scheme=...] so it outranks the older
+ * rules in globals.css whatever the stylesheet order.
+ *
+ * The layout sets data-scheme to "light" or "dark"; "auto" is resolved to one
+ * of them by a small inline script before first paint (see the admin layout).
+ */
+
+/* ============================== light ============================== */
+[data-admin][data-cs][data-scheme="light"] {
+  /* Neutral silver ramp, a breath warm, like silver-gelatin paper. */
+  --color-white: #ffffff;
+  --color-slate-50: #f7f7f5;
+  --color-slate-100: #efefec;
+  --color-slate-200: #e4e4e1;
+  --color-slate-300: #cfcfcb;
+  --color-slate-400: #73736d; /* placeholders and quiet labels: 4.8:1 on white */
+  --color-slate-500: #5f5f5a;
+  --color-slate-600: #4b4b47;
+  --color-slate-700: #373734;
+  --color-slate-800: #232321;
+  --color-slate-900: #121211;
+  --color-slate-950: #0b0b0b;
+
+  /* Status, muted: they mean something, so they keep a hue, but never shout. */
+  --color-emerald-50: #eef4f0;
+  --color-emerald-100: #dcebe1;
+  --color-emerald-200: #c6dccd;
+  --color-emerald-500: #3e8a63;
+  --color-emerald-600: #2f7351;
+  --color-emerald-700: #285f44;
+  --color-emerald-800: #1f4d37;
+  --color-amber-50: #f8f3e6;
+  --color-amber-100: #f1e6c9;
+  --color-amber-200: #e4d2a3;
+  --color-amber-500: #b98a2b;
+  --color-amber-600: #8f6c1e;
+  --color-amber-700: #775917;
+  --color-amber-800: #614812;
+  --color-amber-900: #4b370d;
+  --color-red-50: #f9efed;
+  --color-red-100: #f3ddd9;
+  --color-red-200: #e9c4bd;
+  --color-red-300: #dca499;
+  --color-red-400: #cf6d5c;
+  --color-red-500: #c2452f;
+  --color-red-600: #a9392a;
+  --color-red-700: #8e3023;
+  --color-rose-50: #f9efed;
+  --color-rose-200: #e9c4bd;
+  --color-rose-500: #c2452f;
+  --color-rose-700: #8e3023;
+  --color-rose-800: #74271d;
+  --color-sky-50: #eef2f6;
+  --color-sky-200: #cbd8e4;
+  --color-sky-700: #2f5573;
+  --color-violet-50: #f2f0f5;
+  --color-violet-700: #4f466b;
+
+  /* Surfaces: the sheet is white; panels are told apart by hairlines. */
+  --admin-canvas: #ffffff;
+  --admin-surface: #ffffff;
+  --admin-inset: #f7f7f5;
+  --admin-line: #e4e4e1;
+  --admin-line-strong: #cfcfcb;
+  --admin-shadow: none;
+  --admin-shadow-lg: 0 1px 2px rgba(11, 11, 11, 0.06), 0 12px 32px -12px rgba(11, 11, 11, 0.22);
+
+  /* Ink is the accent; red is kept for marks only. */
+  --admin-accent: #0b0b0b;
+  --admin-btn: #0b0b0b;
+  --admin-btn-ink: #ffffff;
+  --cs-ink: #0b0b0b;
+  --cs-mark: #d2402b;
+  --cs-mark-text: #b5341f; /* red used as text on white: 5.2:1 */
+  --cs-plate: #0b0b0b; /* the one reversed plate per screen */
+  --cs-plate-ink: #ffffff;
+
+  color-scheme: light;
+}
+
+/* ============================== dark =============================== */
+[data-admin][data-cs][data-scheme="dark"] {
+  --color-white: #141413;
+  --color-slate-50: #1b1b1a;
+  --color-slate-100: #222220;
+  --color-slate-200: #2a2a28;
+  --color-slate-300: #3a3a37;
+  --color-slate-400: #8f8f8a;
+  --color-slate-500: #a8a8a3;
+  --color-slate-600: #bdbdb8;
+  --color-slate-700: #d3d3cf;
+  --color-slate-800: #e7e7e4;
+  --color-slate-900: #f4f4f2;
+  --color-slate-950: #ffffff;
+
+  --color-emerald-50: #15241c;
+  --color-emerald-100: #1b2f24;
+  --color-emerald-200: #284534;
+  --color-emerald-500: #5fae84;
+  --color-emerald-600: #74bd95;
+  --color-emerald-700: #8ccaa6;
+  --color-emerald-800: #a2d5b6;
+  --color-amber-50: #2a2313;
+  --color-amber-100: #352b16;
+  --color-amber-200: #4a3c1d;
+  --color-amber-500: #c99a3c;
+  --color-amber-600: #d4a94f;
+  --color-amber-700: #ddb965;
+  --color-amber-800: #e6c87e;
+  --color-amber-900: #efd79a;
+  --color-red-50: #2c1814;
+  --color-red-100: #3a1f1a;
+  --color-red-200: #522c24;
+  --color-red-300: #6e3a2f;
+  --color-red-400: #d7705f;
+  --color-red-500: #e0634d;
+  --color-red-600: #ec8a79;
+  --color-red-700: #f2a194;
+  --color-rose-50: #2c1814;
+  --color-rose-200: #522c24;
+  --color-rose-500: #e0634d;
+  --color-rose-700: #f2a194;
+  --color-rose-800: #f5b4a9;
+  --color-sky-50: #16202a;
+  --color-sky-200: #273746;
+  --color-sky-700: #9cbcd8;
+  --color-violet-50: #1f1c26;
+  --color-violet-700: #bdb3d6;
+
+  --admin-canvas: #0e0e0d;
+  --admin-surface: #141413;
+  --admin-inset: #1b1b1a;
+  --admin-line: #2a2a28;
+  --admin-line-strong: #3a3a37;
+  --admin-shadow: none;
+  --admin-shadow-lg: 0 1px 2px rgba(0, 0, 0, 0.5), 0 14px 36px -12px rgba(0, 0, 0, 0.8);
+
+  --admin-accent: #f4f4f2;
+  --admin-btn: #f4f4f2;
+  --admin-btn-ink: #0e0e0d;
+  --cs-ink: #f4f4f2;
+  --cs-mark: #e0563f;
+  --cs-mark-text: #ef8a77; /* 6.4:1 on the dark sheet */
+  --cs-plate: #f4f4f2;
+  --cs-plate-ink: #0e0e0d;
+
+  color-scheme: dark;
+}
+
+/* ============================ both schemes ========================== */
+[data-admin][data-cs] {
+  --admin-radius: 6px;
+  --admin-radius-sm: 4px;
+  --on-colour: #ffffff;
+
+  --font-admin: var(--font-cs-sans);
+  --font-admin-display: var(--font-cs-sans);
+  --font-admin-mono: var(--font-cs-mono);
+
+  /* The rail is film black in both schemes. */
+  --admin-sidebar: #0b0b0b;
+  --rail-line: rgba(255, 255, 255, 0.08);
+  --rail-text: rgba(255, 255, 255, 0.74);
+  --rail-label: rgba(255, 255, 255, 0.52);
+  --rail-hover: rgba(255, 255, 255, 0.07);
+  --rail-rule: rgba(255, 255, 255, 0.2);
+
+  background-color: var(--admin-canvas);
+  color: var(--color-slate-900);
+  font-family: var(--font-cs-sans), ui-sans-serif, system-ui, sans-serif;
+  font-feature-settings: "ss01" on;
+}
+[data-admin][data-cs][data-scheme="dark"] {
+  --admin-sidebar: #000000;
+}
+
+/* Headings and figures: the same face, carried by weight, not a second voice. */
+[data-admin][data-cs] .adm-display {
+  font-family: var(--font-cs-sans), ui-sans-serif, sans-serif;
+  letter-spacing: -0.02em;
+}
+
+/* Edge codes: data read character by character. */
+[data-admin][data-cs] .adm-mono {
+  font-family: var(--font-cs-mono), ui-monospace, monospace;
+  font-size: 0.75rem;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Figures line up in columns everywhere. */
+[data-admin][data-cs] :is(table, .adm-stat, .tabular-nums) {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------ rail ------------------------------ */
+[data-admin][data-cs] .adm-rail {
+  background-color: var(--admin-sidebar);
+  background-image: none;
+  border-right: 1px solid var(--rail-line);
+}
+[data-admin][data-cs] .adm-rail-label {
+  color: var(--rail-label);
+  letter-spacing: 0.08em;
+}
+[data-admin][data-cs][data-scheme] .adm-rail-item {
+  color: var(--rail-text);
+  position: relative;
+}
+[data-admin][data-cs][data-scheme] .adm-rail-item:hover {
+  background-color: var(--rail-hover);
+  color: #ffffff;
+}
+/* The current page: a lifted frame and a red wax-pencil dot, not a filled pill. */
+[data-admin][data-cs][data-scheme] .adm-rail-item[data-active="true"],
+[data-admin][data-cs][data-scheme] .adm-rail-item[data-active="true"]:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  box-shadow: none;
+  filter: none;
+}
+[data-admin][data-cs] .adm-rail-item[data-active="true"]::before {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 50%;
+  width: 5px;
+  height: 5px;
+  margin-top: -2.5px;
+  border-radius: 50%;
+  background: var(--cs-mark);
+}
+[data-admin][data-cs][data-scheme] .adm-rail-sub[data-active="true"] {
+  background-color: transparent;
+  color: #ffffff;
+  box-shadow: none;
+}
+
+/* --------------------------- focus and browser --------------------------- */
+[data-admin][data-cs] .adm-focus:focus-visible,
+[data-admin][data-cs] :is(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--cs-mark);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+[data-admin][data-cs] .adm-rail .adm-focus:focus-visible {
+  outline-color: #ffffff;
+}
+[data-admin][data-cs] ::selection {
+  background: color-mix(in srgb, var(--cs-mark) 28%, transparent);
+  color: inherit;
+}
+[data-admin][data-cs] :is(input, textarea) {
+  caret-color: var(--cs-mark);
+}
+[data-admin][data-cs] * {
+  scrollbar-color: var(--admin-line-strong) transparent;
+  scrollbar-width: thin;
+}
+[data-admin][data-cs] .adm-rail * {
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+[data-admin][data-cs] a {
+  text-underline-offset: 3px;
+}
+[data-admin][data-cs] .accent-\[var\(--admin-accent\)\],
+[data-admin][data-cs] input[type="checkbox"],
+[data-admin][data-cs] input[type="radio"] {
+  accent-color: var(--cs-ink);
+}
+
+/* ----------------------- accent usages in pages ----------------------- */
+/* The accent is ink in this theme, so accent-coloured text and edges read as
+   emphasis, not as a second colour. */
+[data-admin][data-cs][data-scheme] .text-\[var\(--admin-accent\)\] {
+  color: var(--cs-ink);
+}
+[data-admin][data-cs][data-scheme] .border-\[var\(--admin-accent\)\] {
+  border-color: var(--cs-ink);
+}
+[data-admin][data-cs][data-scheme] .ring-\[var\(--admin-accent\)\] {
+  --tw-ring-color: var(--cs-ink);
+}
+[data-admin][data-cs][data-scheme] [class*="bg-\[var\(--admin-accent\)\]\/"] {
+  background-color: var(--admin-inset);
+}
+
+/* Primary buttons: solid ink, no gradient. */
+[data-admin][data-cs] .bg-\[var\(--admin-btn\)\] {
+  background-image: none;
+  box-shadow: none;
+}
+[data-admin][data-cs] .bg-\[var\(--admin-btn\)\]:hover {
+  filter: none;
+  background-color: color-mix(in srgb, var(--admin-btn) 86%, var(--admin-canvas));
+}
+
+/* -------------------- pastel section grounds → the sheet -------------------- */
+/* Screens used tinted pastel grounds for sections and badges. In this theme
+   they all become the inset grey, so colour is left to status alone. */
+[data-admin][data-cs][data-scheme] :is(
+  .bg-\[\#E2EEEA\], .bg-\[\#E3EAF3\], .bg-\[\#F5EDDA\], .bg-\[\#E4EEDE\],
+  .bg-\[\#F6E6DB\], .bg-\[\#F4E2E8\], .bg-\[\#F2E4CC\], .bg-\[\#DEEAF4\],
+  .bg-\[\#FBEFB9\], .bg-\[\#F1F4F7\], .bg-\[\#FDE2C4\], .bg-\[\#FCEFC0\],
+  .bg-\[\#FBDFC8\], .bg-\[\#FBD9E4\], .bg-\[\#FBD5D5\]
+) {
+  background-color: var(--admin-inset);
+}
+
+/* Dark status chips: globals.css pins fixed hues for these; point them back at
+   the muted ramp above. */
+[data-admin][data-cs][data-scheme="dark"] .bg-emerald-50 { background-color: var(--color-emerald-50); }
+[data-admin][data-cs][data-scheme="dark"] :is(.text-emerald-700, .text-emerald-800) { color: var(--color-emerald-700); }
+[data-admin][data-cs][data-scheme="dark"] .border-emerald-200 { border-color: var(--color-emerald-200); }
+[data-admin][data-cs][data-scheme="dark"] .bg-amber-50 { background-color: var(--color-amber-50); }
+[data-admin][data-cs][data-scheme="dark"] :is(.text-amber-700, .text-amber-800) { color: var(--color-amber-700); }
+[data-admin][data-cs][data-scheme="dark"] .border-amber-200 { border-color: var(--color-amber-200); }
+[data-admin][data-cs][data-scheme="dark"] .bg-red-50 { background-color: var(--color-red-50); }
+[data-admin][data-cs][data-scheme="dark"] :is(.text-red-600, .text-red-700) { color: var(--color-red-600); }
+[data-admin][data-cs][data-scheme="dark"] .border-red-200 { border-color: var(--color-red-200); }
+
+/* ------------------------- metric tiles (interim) ------------------------- */
+/* StatCard paints gradient tiles inline. Until the shell phase rebuilds it as
+   a framed exposure, the tile is drawn as a frame here. */
+[data-admin][data-cs] .adm-stat {
+  --on-colour: var(--color-slate-900);
+  background-image: none !important;
+  background-color: var(--admin-surface);
+  border: 1px solid var(--admin-line-strong);
+  color: var(--color-slate-900);
+}
+[data-admin][data-cs] .adm-stat:hover {
+  filter: none;
+  border-color: var(--cs-ink);
+}
+[data-admin][data-cs] .adm-stat > span[aria-hidden] {
+  display: none;
+}
+
+/* ----------------------------- small chrome ----------------------------- */
+[data-admin][data-cs] .adm-view-store {
+  border-color: var(--admin-line-strong);
+  color: var(--color-slate-800);
+}
+[data-admin][data-cs] .adm-view-store:hover {
+  background-color: var(--admin-inset);
+  color: var(--color-slate-900);
+}
+[data-admin][data-cs] .adm-tip {
+  background: var(--cs-plate);
+  color: var(--cs-plate-ink);
+  border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-admin][data-cs] *,
+  [data-admin][data-cs] *::before,
+  [data-admin][data-cs] *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}

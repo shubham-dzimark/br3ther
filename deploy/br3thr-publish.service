@@ -1,0 +1,9 @@
+[Unit]
+Description=Rebuild and restart the Br3thr shop (Theme Editor publish)
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/br3thr-publish
+TimeoutStartSec=30min
+Nice=5

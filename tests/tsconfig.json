@@ -1,0 +1,12 @@
+{
+  // Tests only: run lib code outside Next. "server-only" throws unless the
+  // bundler marks the module graph as server code, so it is pointed at an
+  // empty module here. Production builds use the root tsconfig untouched.
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "@/*": ["../src/*"],
+      "server-only": ["./server-only-stub.ts"]
+    }
+  }
+}

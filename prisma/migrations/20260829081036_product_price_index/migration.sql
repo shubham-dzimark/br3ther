@@ -1,0 +1,4 @@
+-- AlterTable
+ALTER TABLE "Product" ADD COLUMN     "minPriceCents" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "onSale" BOOLEAN NOT NULL DEFAULT false;
+

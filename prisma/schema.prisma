@@ -1,0 +1,1898 @@
+// br3thr.com - storefront data model
+// Money is stored as integer cents everywhere. Never use floats for money.
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// What kind of product this is, which decides how it is bought.
+enum ProductType {
+  /// One thing, one price.
+  SIMPLE
+  /// Several options (size, colour) with their own price and stock.
+  VARIABLE
+  /// A set that lists the products it is made of.
+  GROUPED
+  /// Sold somewhere else - the page links out instead of adding to a cart.
+  EXTERNAL
+  /// A gift card: each option is a face value; the buyer adds who it is for.
+  GIFT_CARD
+}
+
+/// How an attribute's values are shown to shoppers.
+enum AttributeDisplay {
+  TEXT
+  COLOUR
+  IMAGE
+  /// One of the shop's built-in coloured icons, chosen from a picker.
+  ICON
+}
+
+/// Whether an option may be ordered past zero, and whether to say so.
+enum Backorders {
+  NO
+  NOTIFY
+  YES
+}
+
+/// Availability, independent of the counted quantity - WooCommerce's stock status.
+enum StockStatus {
+  IN_STOCK
+  OUT_OF_STOCK
+  ON_BACKORDER
+}
+
+enum ProductStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum OrderStatus {
+  AWAITING_PAYMENT // EMT instructions sent, transfer not yet received
+  PAYMENT_RECEIVED // e-Transfer confirmed by staff
+  PROCESSING
+  ON_HOLD // WooCommerce "On hold": unpaid, awaiting confirmation (e.g. portal still pending)
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  REFUNDED
+  FAILED // WooCommerce "Failed": payment failed, handled like a cancellation
+}
+
+enum AdminRole {
+  OWNER
+  STORE_MANAGER
+  ACCOUNTANT
+  EDITOR
+  CUSTOMER_SERVICE
+  STAFF // legacy - treated as STORE_MANAGER
+}
+
+model Category {
+  id                 String                @id @default(cuid())
+  name               String
+  slug               String                @unique
+  description        String?
+  imageUrl           String?
+  /// Homepage category card: the small line above the name, and the card's
+  /// own background colour (#rrggbb). Both optional - a card with neither
+  /// falls back to the brand tint and shows no eyebrow.
+  subtitle           String?
+  bgColour           String?
+  seoTitle           String?
+  seoDescription     String?
+  sortOrder          Int                   @default(0)
+  parentId           String?
+  parent             Category?             @relation("CategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children           Category[]            @relation("CategoryTree")
+  products           Product[]
+  taggedProducts     Product[]             @relation("ProductCategories")
+  giftTriggerFor     GiftRule[]            @relation("GiftTriggerCategory")
+  /// Checkout upsell offers triggered by this category.
+  upsellOfferTrigger CheckoutUpsellOffer[] @relation("UpsellOfferTriggerCategories")
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+
+  @@index([slug])
+  @@index([parentId])
+}
+
+model Product {
+  id               String  @id @default(cuid())
+  slug             String  @unique
+  name             String
+  shortDescription String?
+  description      String?
+
+  /**
+   * Each description can be prose or a spec table. "text" | "table".
+   * The table is stored as its own JSON rather than as HTML inside the prose
+   * field, so the rows stay editable as rows - a table pasted into the rich
+   * editor becomes markup nobody can maintain, and the shop cannot restyle it
+   * later without editing every product.
+   */
+  shortFormat       String                  @default("text")
+  shortTable        String                  @default("")
+  descriptionFormat String                  @default("text")
+  descriptionTable  String                  @default("")
+  /// Table colour for both tables on this product: the label column's wash,
+  /// the rules between rows and the outer border. Blank uses the theme.
+  tableAccent       String?
+  /// Label text colour, kept separate from the table colour - a pale table
+  /// wash and a readable label are rarely the same value.
+  tableTextAccent   String?
+  /// Outer border and the rules between rows. Separate again, because rules
+  /// drawn in the fill colour are invisible against it.
+  tableBorderAccent String?
+  type              ProductType             @default(SIMPLE)
+  attributeValues   ProductAttributeValue[]
+  /// Parent-level inventory. A variable product keeps its own SKU here, and
+  /// may count stock at this level instead of per option.
+  sku               String?
+  manageStock       Boolean                 @default(false)
+  stock             Int?
+  stockStatus       StockStatus             @default(IN_STOCK)
+  /// One per order, whatever the quantity box says.
+  soldIndividually  Boolean                 @default(false)
+  /// Where an EXTERNAL product sends the shopper, and the button's wording.
+  externalUrl       String?
+  externalLabel     String?
+  status            ProductStatus           @default(DRAFT)
+  featured          Boolean                 @default(false)
+  /// Given away by free gift offers only: hidden from the shop, search, every
+  /// listing and its own product page, and never added to a cart by a shopper.
+  isGiftOnly        Boolean                 @default(false)
+  /// Primary category: drives the breadcrumb and the related-products fallback.
+  categoryId        String?
+  category          Category?               @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  /// Every category the product appears under, including the primary one.
+  categories        Category[]              @relation("ProductCategories")
+  images            ProductImage[]
+  variants          ProductVariant[]
+  deals             DealProduct[]
+  orderItems        OrderItem[]
+  coverImageUrl     String?
+  videoUrl          String?
+
+  // Denormalised so the shop can filter/sort without aggregating relations.
+  ratingAverage Float    @default(0)
+  ratingCount   Int      @default(0)
+  minPriceCents Int      @default(0)
+  onSale        Boolean  @default(false)
+  reviews       Review[]
+
+  seoTitle       String?
+  seoDescription String?
+
+  // Scheduled product-level discount, applied on top of variant pricing.
+  discountTitle    String?
+  discountPercent  Int       @default(0)
+  discountStartsAt DateTime?
+  discountEndsAt   DateTime?
+  discountActive   Boolean   @default(false)
+  /// Set when the discount above came from a Deal, so it can be reverted
+  /// cleanly when that deal ends and a hand-set discount is never clobbered.
+  discountDealId   String?
+
+  /// Hand-picked "you may also like" products. Falls back to same-category
+  /// products on the storefront when empty.
+  upsells  Product[] @relation("ProductUpsells")
+  upsellOf Product[] @relation("ProductUpsells")
+
+  /// "Frequently bought together" - the companions offered on this product's
+  /// page. Kept separate from upsells, which is a browsing suggestion; this is
+  /// a bundle the customer adds in one action.
+  bundledWith           Product[]             @relation("ProductBundle")
+  bundleOf              Product[]             @relation("ProductBundle")
+  /// Percent off the companions when the whole bundle is added at once.
+  bundleDiscountPercent Int                   @default(0)
+  /// Checkout upsell offers this product is offered in, and the ones it triggers.
+  upsellOfferIn         CheckoutUpsellOffer[] @relation("UpsellOfferProducts")
+  upsellOfferTrigger    CheckoutUpsellOffer[] @relation("UpsellOfferTriggerProducts")
+  /// Starting number for "N+ shoppers have bought this" on the slide cart:
+  /// sales made before this store. Paid orders are added on top.
+  shoppersBase          Int                   @default(0)
+  /// Bundle & Save quantity price breaks: [{ qty, percent, badge }], see lib/quantity-tiers.
+  quantityTiers         Json?
+
+  giftTriggerFor GiftRule[]     @relation("GiftTriggerProduct")
+  wishlistedBy   WishlistItem[]
+
+  publishedAt     DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  /// Woo's shipping class: what this thing costs extra to post.
+  shippingClassId String?
+  shippingClass   ShippingClass? @relation(fields: [shippingClassId], references: [id], onDelete: SetNull)
+
+  @@index([slug])
+  @@index([status, publishedAt])
+  @@index([categoryId])
+}
+
+model ProductImage {
+  id        String  @id @default(cuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  url       String
+  alt       String?
+  sortOrder Int     @default(0)
+
+  @@index([productId])
+}
+
+model ProductVariant {
+  id                 String      @id @default(cuid())
+  productId          String
+  product            Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  name               String // e.g. "250 ml", "Large", "Single unit"
+  sku                String      @unique
+  priceCents         Int
+  compareAtCents     Int? // struck-through "was" price
+  /// The price before the first bulk price change, for "Restore original prices".
+  /// Cleared by a restore or a hand-edited price.
+  originalPriceCents Int?
+  stock              Int         @default(0)
+  /// Overrides the count: OUT_OF_STOCK never sells, ON_BACKORDER always can.
+  stockStatus        StockStatus @default(IN_STOCK)
+  /// Off means "always in stock": the quantity is not counted or required.
+  manageStock        Boolean     @default(true)
+  backorders         Backorders  @default(NO)
+  /// Warn in the admin below this many. Null uses no threshold.
+  lowStockAmount     Int?
+  weightGrams        Int?
+  isDefault          Boolean     @default(false)
+  isActive           Boolean     @default(true)
+
+  /// Scannable code for this variant. Unique so a scan can only ever resolve
+  /// to one item; null until one is assigned.
+  barcode       String?               @unique
+  /// The symbology it was generated in, so a re-render matches the number.
+  barcodeFormat String?
+  imageUrl      String?
+  sortOrder     Int                   @default(0)
+  values        ProductVariantValue[]
+  orderItems    OrderItem[]
+  giftInRules   GiftRuleProduct[]
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+
+  /// Sortly warehouse item this option is linked to (matched by barcode).
+  /// One item per option is enforced in the sync code: adding a unique
+  /// constraint makes prisma db push demand --accept-data-loss, which is not used.
+  sortlyItemId      Int?
+  /// The count the site and Sortly last agreed on; each sync compares both sides with it.
+  sortlyBaseQty     Int?
+  sortlySyncedAt    DateTime?
+  /// Set just before a count is sent to Sortly and cleared once it is written
+  /// back here, so an interrupted update can be finished without double-counting.
+  sortlyPendingQty  Int?
+  sortlyPendingRun  String?
+  sortlyPendingSite Int?
+  /// The linked Sortly item's own ID (e.g. S01QSR0001) and label codes, kept
+  /// current by the sync, so scanning a Sortly-printed label finds this option.
+  sortlySid         String?
+  sortlyLabelCodes  String[]  @default([])
+
+  @@index([productId])
+  @@index([sku])
+  @@index([sortlyItemId])
+  @@index([sortlySid])
+}
+
+model Customer {
+  id           String  @id @default(cuid())
+  email        String  @unique
+  name         String?
+  phone        String?
+  passwordHash String? // null until they set one; guest checkout is allowed
+
+  // Referrals
+  referralCode   String? @unique
+  referredByCode String?
+  creditCents    Int     @default(0)
+
+  // Loyalty points, mirroring the vicetrip scheme (earn per $, redeem at a rate).
+  pointsBalance      Int                  @default(0)
+  signupBonusAwarded Boolean              @default(false)
+  loyalty            LoyaltyTransaction[]
+
+  orders        Order[]
+  carts         Cart[]
+  reviews       Review[]
+  sessions      CustomerSession[]
+  addresses     Address[]
+  referralsMade ReferralEvent[]        @relation("Referrer")
+  blogComments  BlogComment[]
+  wishlist      WishlistItem[]
+  resetTokens   PasswordResetToken[]
+  tickets       Ticket[]
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+  verifications CustomerVerification[]
+
+  @@index([email])
+  @@index([referralCode])
+}
+
+model Order {
+  id          String      @id @default(cuid())
+  orderNumber String      @unique // human-facing, e.g. NL-2026-0001
+  status      OrderStatus @default(AWAITING_PAYMENT)
+
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  email      String
+  phone      String?
+
+  // Address snapshot - deliberately denormalised so past orders never change
+  shipName       String
+  shipLine1      String
+  shipLine2      String?
+  shipCity       String
+  shipRegion     String
+  shipPostalCode String
+  shipCountry    String  @default("CA")
+
+  subtotalCents    Int
+  shippingCents    Int     @default(0)
+  /// The shipping method's name as shown at checkout, kept as a snapshot.
+  shippingMethod   String?
+  taxCents         Int     @default(0)
+  discountCents    Int     @default(0)
+  couponCode       String?
+  paymentMethodKey String? // "emt" | "crypto"
+  /// Opaque per-order key sent to the crypto pay portal - WooCommerce's
+  /// order_key in the plugin this replaces. Never a credential for our pages.
+  paymentKey       String?
+
+  // Pay Portal sync bookkeeping
+  // Shipment tracking (the number itself is the existing trackingCode)
+  trackingCarrier String?
+  shippedAt       DateTime?
+  /// Who attached the tracking, and how ("manual" or "csv"), for the audit line.
+  trackingAddedBy String?
+  trackingSource  String?
+
+  portalSyncedAt    DateTime?
+  portalPayloadHash String?
+  portalStatus      String?
+  totalCents        Int
+  currency          String    @default("CAD")
+
+  // Interac e-Transfer (EMT) settlement - no card processor involved
+  emtSenderEmail String?
+  emtReference   String?
+
+  /**
+   * Capability token for the guest receipt page.
+   * Order numbers are sequential and therefore guessable, so they cannot be
+   * the thing that authorises a receipt. Only the SHA-256 hash is stored: a
+   * database copy is then not a set of working receipt links.
+   */
+  receiptTokenHash   String?   @unique
+  emtSecurityAnswer  String? // answer the customer must set on the transfer
+  paymentConfirmedAt DateTime?
+  paymentConfirmedBy String? // admin user id who confirmed the funds landed
+
+  customerNote String?
+  staffNote    String?
+  trackingCode String?
+
+  /// Face value of gift cards bought on this order. Kept out of
+  /// subtotalCents, which stays products-only (points, reports, discounts).
+  giftCardCents         Int        @default(0)
+  /// What a gift card paid toward this order, and which card.
+  giftCardRedeemedCents Int        @default(0)
+  giftCardRedeemedId    String?
+  giftCardsBought       GiftCard[] @relation("GiftCardPurchaseOrder")
+
+  items     OrderItem[]
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@index([orderNumber])
+  @@index([status, createdAt])
+  @@index([email])
+}
+
+model OrderItem {
+  id      String @id @default(cuid())
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  productId String?
+  product   Product?        @relation(fields: [productId], references: [id], onDelete: SetNull)
+  variantId String?
+  variant   ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+
+  // Snapshots - what the customer actually bought, frozen at purchase time
+  nameSnapshot    String
+  variantSnapshot String?
+  skuSnapshot     String?
+  unitPriceCents  Int
+  quantity        Int
+  lineTotalCents  Int
+
+  /// Carried through from the cart so an invoice can label a zero-priced line
+  /// as a gift rather than as a mystery free item.
+  isGift Boolean @default(false)
+
+  /// A gift card line, with who it is for (GiftCardDetails).
+  isGiftCard      Boolean @default(false)
+  giftCardDetails Json?
+
+  /// Bought from the checkout upsell block, and the offer that showed it.
+  fromUpsell    Boolean              @default(false)
+  upsellOfferId String?
+  upsellOffer   CheckoutUpsellOffer? @relation(fields: [upsellOfferId], references: [id], onDelete: SetNull)
+
+  @@index([orderId])
+  @@index([productId])
+  @@index([fromUpsell])
+}
+
+model AdminUser {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  name         String
+  passwordHash String
+  role         AdminRole @default(STAFF)
+  isActive     Boolean   @default(true)
+  lastLoginAt  DateTime?
+
+  // Two-factor (TOTP). The secret is only meaningful once totpEnabledAt is set:
+  // enrolment writes the secret first, then the first correct code confirms it,
+  // so an abandoned setup can never lock anyone out.
+  totpSecret    String?
+  totpEnabledAt DateTime?
+  // Single-use recovery codes, stored hashed like passwords.
+  recoveryCodes AdminRecoveryCode[]
+
+  // Set by the login guard after too many failures. Cleared on a good login.
+  lockedUntil DateTime?
+
+  sessions      AdminSession[]
+  loginAttempts LoginAttempt[]
+  blogPosts     BlogPost[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@index([email])
+}
+
+model AdminSession {
+  id          String    @id @default(cuid())
+  tokenHash   String    @unique // only the hash is stored; raw token lives in the cookie
+  adminUserId String
+  adminUser   AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+  expiresAt   DateTime
+  ipAddress   String?
+  userAgent   String?
+  // Written on use (throttled to once a minute) so the session list can show
+  // what is actually live, and so an idle session can be expired on its own.
+  lastSeenAt  DateTime  @default(now())
+  createdAt   DateTime  @default(now())
+
+  @@index([tokenHash])
+  @@index([adminUserId])
+}
+
+/// Single-use break-glass codes for when the authenticator app is gone.
+model AdminRecoveryCode {
+  id          String    @id @default(cuid())
+  adminUserId String
+  adminUser   AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+  codeHash    String
+  usedAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([adminUserId])
+}
+
+enum LoginKind {
+  ADMIN
+  CUSTOMER
+}
+
+/// Every sign-in attempt, good or bad.
+///
+/// This is the answer to "where was this logged in from" - a successful session
+/// alone cannot tell you about the thousand failures that came before it. Kept
+/// for both admins and customers, pruned by age from the security page.
+model LoginAttempt {
+  id          String     @id @default(cuid())
+  kind        LoginKind  @default(ADMIN)
+  email       String
+  ip          String?
+  /// Resolved from the IP at write time. Storing it beats resolving on render:
+  /// the geo lookup is cheap once and the answer must not drift later.
+  country     String?
+  city        String?
+  userAgent   String?
+  success     Boolean    @default(false)
+  /// bad_password | unknown_user | inactive | locked | bad_totp | ip_blocked | ok
+  reason      String
+  /// Only set on success, and only for admins.
+  adminUserId String?
+  adminUser   AdminUser? @relation(fields: [adminUserId], references: [id], onDelete: SetNull)
+  createdAt   DateTime   @default(now())
+
+  @@index([createdAt])
+  @@index([email, createdAt])
+  @@index([ip, createdAt])
+}
+
+model StoreSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+/**
+ * ---------- Sortly warehouse sync ----------
+ */
+
+/// A stock movement made on the site (paid order, cancellation, gift line)
+/// still to be applied to the linked Sortly item as a change. Written in the
+/// same transaction as the stock change itself.
+model SortlyStockChange {
+  id        String    @id @default(cuid())
+  variantId String
+  delta     Int
+  reason    String
+  orderId   String?
+  /// Claimed by one sync run while its update to Sortly is in flight.
+  runId     String?
+  attempts  Int       @default(0)
+  lastError String?
+  appliedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([variantId, appliedAt])
+  @@index([runId])
+}
+
+/// What the Sortly sync did, for the admin screen. Pruned after 30 days.
+model SortlySyncLog {
+  id           String   @id @default(cuid())
+  level        String
+  action       String
+  message      String
+  variantId    String?
+  sortlyItemId Int?
+  createdAt    DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+/**
+ * ---------- Product attributes & variations ----------
+ */
+
+model Attribute {
+  id        String           @id @default(cuid())
+  name      String           @unique // "Size", "Color"
+  slug      String           @unique
+  /// Swatches on the storefront: plain labels, colour circles, or thumbnails.
+  display   AttributeDisplay @default(TEXT)
+  sortOrder Int              @default(0)
+  values    AttributeValue[]
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+}
+
+model AttributeValue {
+  id            String                  @id @default(cuid())
+  attributeId   String
+  attribute     Attribute               @relation(fields: [attributeId], references: [id], onDelete: Cascade)
+  value         String
+  /// #rrggbb for a colour swatch, a picture for an image swatch, and an id
+  /// from lib/attribute-icons for an icon swatch.
+  colour        String?
+  imageUrl      String?
+  icon          String?
+  sortOrder     Int                     @default(0)
+  variantValues ProductVariantValue[]
+  productValues ProductAttributeValue[]
+
+  @@unique([attributeId, value])
+  @@index([attributeId])
+}
+
+/**
+ * Join row: which attribute values a product offers (Size: S, M, L).
+ * Separate from the variant join below because a product can list attributes
+ * without selling a separate option for each - a simple product can still say
+ * "Material: cotton" - and because a variable product needs somewhere to keep
+ * the pool its variations are generated from.
+ */
+model ProductAttributeValue {
+  id               String         @id @default(cuid())
+  productId        String
+  product          Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
+  attributeValueId String
+  attributeValue   AttributeValue @relation(fields: [attributeValueId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, attributeValueId])
+  @@index([productId])
+}
+
+/**
+ * Join row: which attribute values make up a given variant (Size=L, Color=Black).
+ */
+model ProductVariantValue {
+  id               String         @id @default(cuid())
+  variantId        String
+  variant          ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  attributeValueId String
+  attributeValue   AttributeValue @relation(fields: [attributeValueId], references: [id], onDelete: Cascade)
+
+  @@unique([variantId, attributeValueId])
+  @@index([variantId])
+}
+
+/**
+ * ---------- Promotions ----------
+ */
+
+enum DiscountType {
+  PERCENT
+  FIXED
+}
+
+model Coupon {
+  id               String       @id @default(cuid())
+  code             String       @unique
+  description      String?
+  type             DiscountType @default(PERCENT)
+  /// Percent (1-100) when type is PERCENT, otherwise an amount in cents.
+  value            Int
+  minSubtotalCents Int          @default(0)
+  maxRedemptions   Int?
+  /// Uses allowed per customer, matched by email across orders (and account). Null = no per-customer limit.
+  maxPerCustomer   Int?
+  timesRedeemed    Int          @default(0)
+  startsAt         DateTime?
+  endsAt           DateTime?
+  isActive         Boolean      @default(true)
+  /// Set when a next-order campaign issued this code.
+  upsellOfferId    String?
+  upsellOffer      CheckoutUpsellOffer? @relation(fields: [upsellOfferId], references: [id], onDelete: SetNull)
+  /// The order that earned this code, for the thank-you page and its email.
+  sourceOrderId    String?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  @@index([code])
+  @@index([upsellOfferId])
+  @@index([sourceOrderId])
+}
+
+/// One segment of the Spin & Win wheel. The coupon it points at is an
+/// ordinary Coupon row, so its limits, expiry and redemption count are
+/// managed in one place rather than duplicated here.
+model SpinPrize {
+  id         String   @id @default(cuid())
+  label      String
+  /// Two short lines on the wheel face, e.g. "10%" / "OFF".
+  lineOne    String   @default("")
+  lineTwo    String   @default("")
+  couponCode String
+  /// Relative chance. Shown as a percentage of the total in the admin.
+  weight     Int      @default(25)
+  colour     String   @default("#50119D")
+  sortOrder  Int      @default(0)
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([isActive, sortOrder])
+}
+
+/**
+ * ---------- Content management ----------
+ */
+
+model ContentPage {
+  id             String   @id @default(cuid())
+  slug           String   @unique // "faq", "privacy-policy", "terms"
+  title          String
+  body           String   @default("")
+  isPublished    Boolean  @default(true)
+  isSystem       Boolean  @default(false) // seeded pages that shouldn't be deleted
+  seoTitle       String?
+  seoDescription String?
+  sortOrder      Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([slug])
+}
+
+/**
+ * ---------- Payment methods ----------
+ */
+
+model PaymentMethod {
+  id           String   @id @default(cuid())
+  key          String   @unique // "emt", "cod", "bank_transfer"
+  label        String
+  instructions String?
+  isEnabled    Boolean  @default(false)
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+/**
+ * ---------- Carts (needed for abandoned-cart tracking once the storefront exists) ----------
+ */
+
+enum CartStatus {
+  ACTIVE
+  CONVERTED
+  ABANDONED
+}
+
+model Cart {
+  id               String     @id @default(cuid())
+  token            String     @unique
+  email            String?
+  customerId       String?
+  customer         Customer?  @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  status           CartStatus @default(ACTIVE)
+  subtotalCents    Int        @default(0)
+  itemCount        Int        @default(0)
+  recoveredOrderId String?
+  lastActivityAt   DateTime   @default(now())
+
+  /// Abandoned-cart recovery. Counting sends on the cart itself is what stops
+  /// a customer being emailed about the same cart every time the sweep runs.
+  remindersSent  Int                @default(0)
+  lastReminderAt DateTime?
+  /// Set when a recovery link is actually opened, so the admin can tell which
+  /// reminders did anything.
+  recoveredAt    DateTime?
+  items          CartItem[]
+  followUps      CartFollowUpSend[]
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  @@index([status, lastActivityAt])
+  @@index([email])
+  @@index([status, remindersSent, lastActivityAt])
+}
+
+/// One step in the abandoned-cart follow-up sequence.
+///
+/// A shop runs several of these at once - a nudge half an hour after the cart
+/// goes quiet, a reminder the next day, a last call with a discount two days
+/// later. Each carries its own wording and its own delay, measured from the
+/// moment the cart went quiet rather than from the previous email, so removing
+/// or disabling one step never shifts the others.
+model CartFollowUp {
+  id           String             @id @default(cuid())
+  name         String
+  subject      String
+  /// Plain text with {{merge}} fields; rendered into the house email shell.
+  body         String
+  /// Measured from the cart's last activity.
+  delayMinutes Int
+  enabled      Boolean            @default(true)
+  /// Included in this step's email when set. Blank sends no code.
+  couponCode   String             @default("")
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  sends        CartFollowUpSend[]
+
+  @@index([enabled, delayMinutes])
+}
+
+/// One follow-up actually sent to one cart.
+///
+/// The unique pair is the whole anti-spam guarantee: however often the sweep
+/// runs, a cart can only ever receive a given step once. Clicks and
+/// conversions are stamped here too, so each template can be judged on what it
+/// actually brought back rather than on how many went out.
+model CartFollowUpSend {
+  id           String       @id @default(cuid())
+  followUpId   String
+  followUp     CartFollowUp @relation(fields: [followUpId], references: [id], onDelete: Cascade)
+  cartId       String
+  cart         Cart         @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  email        String
+  sentAt       DateTime     @default(now())
+  /// Set when the recovery link in this email is opened.
+  clickedAt    DateTime?
+  /// Set when the cart this went to became a paid order.
+  convertedAt  DateTime?
+  orderId      String?
+  revenueCents Int?
+
+  @@unique([followUpId, cartId])
+  @@index([sentAt])
+  @@index([cartId])
+}
+
+/// Addresses that must not receive marketing email.
+///
+/// Abandoned-cart reminders are commercial messages, so under Canada's CASL
+/// every one needs a working unsubscribe and the opt-out has to be honoured.
+/// Keyed by address rather than customer, because guest carts have an email
+/// and no account behind it.
+model EmailSuppression {
+  email     String   @id
+  reason    String   @default("unsubscribed")
+  createdAt DateTime @default(now())
+}
+
+model CartItem {
+  id              String  @id @default(cuid())
+  cartId          String
+  cart            Cart    @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  variantId       String?
+  nameSnapshot    String
+  variantSnapshot String?
+  unitPriceCents  Int
+  quantity        Int     @default(1)
+
+  /// Gift lines are priced at zero and managed by the gift engine, not by the
+  /// customer - the cart hides the quantity stepper and the remove button.
+  isGift     Boolean @default(false)
+  giftRuleId String?
+
+  /// Who a gift card line is for (GiftCardDetails); null on product lines.
+  giftCardDetails Json?
+
+  /// Added from the checkout upsell block; the offer is null when it came from
+  /// a product's own companions. Copied onto the order line when the order is
+  /// placed, which is what the upsell sales report counts.
+  fromUpsell    Boolean @default(false)
+  upsellOfferId String?
+
+  @@index([cartId])
+}
+
+/**
+ * ---------- Promotional deals (flash / featured / clearance) ----------
+ */
+
+enum DealType {
+  FLASH
+  FEATURED
+  CLEARANCE
+}
+
+model Deal {
+  id          String        @id @default(cuid())
+  title       String
+  type        DealType
+  description String?
+  /// Percent off (1-100) applied to the linked products while the deal runs.
+  percentOff  Int           @default(0)
+  startsAt    DateTime?
+  endsAt      DateTime?
+  isActive    Boolean       @default(true)
+  bannerImage String?
+  products    DealProduct[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([type, isActive])
+}
+
+model DealProduct {
+  id        String  @id @default(cuid())
+  dealId    String
+  deal      Deal    @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([dealId, productId])
+  @@index([dealId])
+}
+
+/**
+ * ---------- Help & support ----------
+ */
+
+enum TicketStatus {
+  OPEN
+  PENDING
+  RESOLVED
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  NORMAL
+  HIGH
+}
+
+model Ticket {
+  id          String         @id @default(cuid())
+  reference   String         @unique
+  subject     String
+  email       String
+  name        String?
+  /// Who owns this thread, when it was started by a signed-in customer.
+  ///
+  /// Without this the chat cookie was the only claim of ownership, so the
+  /// thread stayed readable after sign-out - on a shared computer the next
+  /// person saw the previous customer's conversation. Null means a genuine
+  /// guest thread, which is cookie-bound and cleared on sign-out.
+  customerId  String?
+  customer    Customer?      @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  status      TicketStatus   @default(OPEN)
+  priority    TicketPriority @default(NORMAL)
+  /// When staff last opened this thread. Customer messages older than this
+  /// are shown as read in the chat widget.
+  staffReadAt DateTime?
+
+  /// The assistant answers until this is set. A customer asking for a person,
+  /// or the assistant deciding it is out of its depth, sets it - and once set
+  /// the assistant stays quiet, so a handover cannot be undone by the next
+  /// message. Only staff can hand a thread back.
+  escalatedAt    DateTime?
+  escalationNote String?
+  orderId        String?
+  messages       TicketMessage[]
+  gaps           UnansweredQuestion[]
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  @@index([status, createdAt])
+  @@index([customerId])
+}
+
+model TicketMessage {
+  id        String   @id @default(cuid())
+  ticketId  String
+  ticket    Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  body      String
+  fromStaff Boolean  @default(false)
+  /// Written by the assistant rather than a person. Shown as such to the
+  /// customer and in the admin inbox - staff must be able to tell at a glance
+  /// what was said on their behalf.
+  fromAi    Boolean  @default(false)
+  authorId  String?
+  /// Stored image names (screenshots/photos), served by /api/chat/file.
+  attachments String[] @default([])
+  createdAt DateTime @default(now())
+
+  @@index([ticketId])
+}
+
+/**
+ * ---------- Finance: owner payouts ----------
+ */
+
+enum PayoutStatus {
+  REQUESTED
+  PAID
+  CANCELLED
+}
+
+/// Every tool the assistant ran, and whether it was allowed to.
+///
+/// Chat messages are attacker-controlled text, so the assistant will
+/// eventually be asked to look up somebody else's order. Authorisation is
+/// enforced in the tools themselves, and this records the outcome either way -
+/// a refused lookup is exactly the thing worth being able to review later.
+model AiToolCall {
+  id        String   @id @default(cuid())
+  ticketId  String?
+  tool      String
+  /// Arguments with anything sensitive already stripped.
+  arguments String   @default("")
+  outcome   String // ok | denied | not_found | error
+  detail    String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([ticketId])
+}
+
+model Payout {
+  id          String       @id @default(cuid())
+  reference   String       @unique
+  amountCents Int
+  currency    String       @default("CAD")
+  method      String       @default("bank_transfer")
+  status      PayoutStatus @default(REQUESTED)
+  note        String?
+  requestedAt DateTime     @default(now())
+  paidAt      DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([status, requestedAt])
+}
+
+/**
+ * ---------- Storefront: reviews ----------
+ */
+
+enum ReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model Review {
+  id                 String       @id @default(cuid())
+  productId          String
+  product            Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  customerId         String?
+  customer           Customer?    @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  authorName         String
+  authorEmail        String
+  rating             Int // 1-5
+  title              String?
+  body               String
+  status             ReviewStatus @default(PENDING)
+  isVerifiedPurchase Boolean      @default(false)
+  /// The shop's own answer, shown under the review on the product page.
+  reply              String?
+  repliedAt          DateTime?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  @@index([productId, status])
+  @@index([status, createdAt])
+}
+
+/**
+ * ---------- Storefront: customer sessions ----------
+ */
+
+/// A single-use, time-limited password reset.
+///
+/// Only the hash of the token is stored, exactly like a session: a leaked
+/// database must not hand anyone a working reset link. usedAt makes the link
+/// single-use, so a reset email sitting in an inbox (or a mail server log)
+/// cannot be replayed later to take the account a second time.
+model PasswordResetToken {
+  id          String    @id @default(cuid())
+  tokenHash   String    @unique
+  customerId  String
+  customer    Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  expiresAt   DateTime
+  usedAt      DateTime?
+  /// Where the reset was asked for, so abuse shows up in the security log.
+  requestedIp String?
+  createdAt   DateTime  @default(now())
+
+  @@index([tokenHash])
+  @@index([customerId])
+}
+
+model CustomerSession {
+  id         String   @id @default(cuid())
+  tokenHash  String   @unique
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  expiresAt  DateTime
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  @@index([tokenHash])
+  @@index([customerId])
+}
+
+/**
+ * ---------- Storefront: referrals ----------
+ */
+
+enum ReferralStatus {
+  PENDING
+  QUALIFIED
+  REWARDED
+  CANCELLED
+}
+
+model ReferralEvent {
+  id            String         @id @default(cuid())
+  code          String
+  referrerId    String
+  referrer      Customer       @relation("Referrer", fields: [referrerId], references: [id], onDelete: Cascade)
+  referredEmail String
+  orderId       String?
+  status        ReferralStatus @default(PENDING)
+  rewardCents   Int            @default(0)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@index([code])
+  @@index([referrerId, status])
+}
+
+/**
+ * ---------- Storefront: saved addresses ----------
+ */
+
+model Address {
+  id         String   @id @default(cuid())
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  label      String? // "Home", "Work"
+  fullName   String
+  line1      String
+  line2      String?
+  city       String
+  region     String
+  postalCode String
+  country    String   @default("CA")
+  phone      String?
+  isDefault  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([customerId])
+}
+
+/**
+ * ---------- Loyalty points ----------
+ */
+
+enum LoyaltyType {
+  EARNED
+  REDEEMED
+  ADJUSTED
+  EXPIRED
+}
+
+model LoyaltyTransaction {
+  id         String      @id @default(cuid())
+  customerId String
+  customer   Customer    @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  /// Positive credits, negative debits. Balance is the running sum.
+  points     Int
+  type       LoyaltyType
+  note       String?
+  orderId    String?
+  createdAt  DateTime    @default(now())
+
+  @@index([customerId, createdAt])
+}
+
+/**
+ * ---------- Media library ----------
+ */
+
+model MediaAsset {
+  id         String   @id @default(cuid())
+  url        String   @unique
+  filename   String
+  mimeType   String
+  sizeBytes  Int
+  alt        String?
+  uploadedBy String?
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+/**
+ * ---------- Marketing popup signups ----------
+ */
+
+model NewsletterSubscriber {
+  id         String   @id @default(cuid())
+  email      String   @unique
+  /// Which offer they signed up through, so campaigns can be compared.
+  source     String   @default("promo_popup")
+  /// The coupon handed out at signup, if any.
+  couponCode String?
+  /// Set when the address is attached to a real customer account later.
+  customerId String?
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+/**
+ * ---------- Storefront navigation ----------
+ */
+
+model NavItem {
+  id        String    @id @default(cuid())
+  label     String
+  url       String
+  /// Which menu this row belongs to: "header" or "footer".
+  location  String    @default("header")
+  /// Null for a top-level item; set makes this a child of that item.
+  parentId  String?
+  parent    NavItem?  @relation("NavChildren", fields: [parentId], references: [id], onDelete: Cascade)
+  children  NavItem[] @relation("NavChildren")
+  sortOrder Int       @default(0)
+  isActive  Boolean   @default(true)
+  newTab    Boolean   @default(false)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([parentId, sortOrder])
+  @@index([location, sortOrder])
+}
+
+/**
+ * ---------- Admin notifications ----------
+ */
+
+enum AdminNotificationType {
+  ORDER_PLACED
+  PAYMENT_CONFIRMED
+  REVIEW_SUBMITTED
+  BLOG_COMMENT
+  NEWSLETTER_SIGNUP
+  LOW_STOCK
+  SUPPORT_MESSAGE
+}
+
+model AdminNotification {
+  id        String                @id @default(cuid())
+  type      AdminNotificationType
+  title     String
+  body      String?
+  /// Where clicking the notification should take you.
+  href      String?
+  readAt    DateTime?
+  createdAt DateTime              @default(now())
+
+  @@index([readAt, createdAt])
+  @@index([createdAt])
+}
+
+/// A browser's Web Push subscription. One row per device that opted in.
+model PushSubscription {
+  id          String    @id @default(cuid())
+  endpoint    String    @unique
+  p256dh      String
+  auth        String
+  /// Which admin enabled it, so their devices can be cleaned up with them.
+  adminUserId String?
+  createdAt   DateTime  @default(now())
+  lastSentAt  DateTime?
+
+  @@index([adminUserId])
+}
+
+/// Carriers the shop can attach tracking to. Seeded from a built-in catalogue,
+/// but editable - name, tracking URL and logo can all be overridden, and a
+/// courier that is not in the catalogue can be added by hand.
+model ShippingCarrier {
+  id        String  @id @default(cuid())
+  key       String  @unique
+  name      String
+  region    String  @default("Global")
+  /// Tracking page, with {n} standing in for the tracking number.
+  trackUrl  String
+  /// Uploaded logo. Falls back to the coloured monogram when unset.
+  logoUrl   String?
+  monogram  String  @default("--")
+  colour    String  @default("#334155")
+  isActive  Boolean @default(true)
+  sortOrder Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive, sortOrder])
+}
+
+/**
+ * ---------- Blog ----------
+ */
+
+enum PostStatus {
+  DRAFT
+  PUBLISHED
+}
+
+model BlogPost {
+  id          String     @id @default(cuid())
+  slug        String     @unique
+  title       String
+  /// Shown on the index and in search results. Derived from the body when blank.
+  excerpt     String     @default("")
+  body        String     @default("")
+  coverImage  String?
+  status      PostStatus @default(DRAFT)
+  /// Set the first time a post is published, and editable afterwards so a
+  /// post can be back-dated or scheduled. A future date stays hidden.
+  publishedAt DateTime?
+  /// Nulled rather than cascaded when staff leave, so posts survive; the
+  /// byline is kept separately in authorName.
+  authorId    String?
+  author      AdminUser? @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  authorName  String?
+
+  seoTitle       String?
+  seoDescription String?
+  /// Off per post, on top of the store-wide switch.
+  commentsOpen   Boolean @default(true)
+  viewCount      Int     @default(0)
+
+  categories BlogCategory[] @relation("PostCategories")
+  tags       BlogTag[]      @relation("PostTags")
+  comments   BlogComment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, publishedAt])
+  @@index([slug])
+}
+
+model BlogCategory {
+  id             String     @id @default(cuid())
+  slug           String     @unique
+  name           String
+  description    String?
+  /// Search-engine title and meta description. May contain %%variables%%,
+  /// which are expanded when the page is rendered - see lib/seo-vars.ts.
+  seoTitle       String?
+  seoDescription String?
+  posts          BlogPost[] @relation("PostCategories")
+  createdAt      DateTime   @default(now())
+
+  @@index([slug])
+}
+
+model BlogTag {
+  id        String     @id @default(cuid())
+  slug      String     @unique
+  name      String
+  posts     BlogPost[] @relation("PostTags")
+  createdAt DateTime   @default(now())
+
+  @@index([slug])
+}
+
+enum CommentStatus {
+  PENDING
+  APPROVED
+  SPAM
+}
+
+model BlogComment {
+  id     String   @id @default(cuid())
+  postId String
+  post   BlogPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  /// Threaded replies, as WordPress does them. Deleting a comment takes its
+  /// replies with it rather than leaving them orphaned under nothing.
+  parentId String?
+  parent   BlogComment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies  BlogComment[] @relation("CommentReplies")
+
+  authorName  String
+  authorEmail String
+  /// Set when a signed-in customer comments, so their name can't be spoofed.
+  customerId  String?
+  customer    Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  body      String
+  status    CommentStatus @default(PENDING)
+  /// Kept for spam triage only.
+  ipAddress String?
+
+  createdAt DateTime @default(now())
+
+  @@index([postId, status, createdAt])
+  @@index([status])
+}
+
+/**
+ * ---------- Uploaded web fonts ----------
+ */
+
+model CustomFont {
+  id     String @id @default(cuid())
+  /// The CSS family name. One family holds several files - regular, bold,
+  /// italic - and the browser picks per weight and style.
+  family String
+  /// 100-900. Stored numerically so @font-face and font-weight agree.
+  weight Int    @default(400)
+  style  String @default("normal") // "normal" | "italic"
+
+  url       String @unique
+  filename  String
+  /// woff2 | woff | truetype | opentype - the src format() hint.
+  format    String
+  sizeBytes Int
+
+  createdAt DateTime @default(now())
+
+  /// One file per weight+style within a family; re-uploading replaces it.
+  @@unique([family, weight, style])
+  @@index([family])
+}
+
+/**
+ * ---------- Frequently bought together ----------
+ */
+
+/**
+ * ---------- Free gifts ----------
+ */
+
+enum GiftTrigger {
+  CART_TOTAL // subtotal reaches an amount
+  BUY_X_GET_Y // N of a product, or N from a category
+  COUPON // a specific coupon code is applied
+}
+
+enum GiftReward {
+  PRODUCT // one of the listed gift items
+  CHEAPEST_IN_CART // the cheapest line becomes free
+  FREE_SHIPPING // shipping waived
+}
+
+model GiftRule {
+  id        String  @id @default(cuid())
+  name      String
+  isEnabled Boolean @default(true)
+  sortOrder Int     @default(0)
+
+  trigger GiftTrigger @default(CART_TOTAL)
+
+  /// CART_TOTAL: the subtotal the cart must reach.
+  minSubtotalCents Int @default(0)
+
+  /// BUY_X_GET_Y: how many, and of what. A category matches any product in it.
+  triggerQuantity    Int       @default(1)
+  triggerProductId   String?
+  triggerProduct     Product?  @relation("GiftTriggerProduct", fields: [triggerProductId], references: [id], onDelete: SetNull)
+  triggerCategoryId  String?
+  triggerCategory    Category? @relation("GiftTriggerCategory", fields: [triggerCategoryId], references: [id], onDelete: SetNull)
+  /// Which products count toward a Buy X or Spend offer, several allowed. When
+  /// both are empty the single product/category above applies, and when those
+  /// are blank too, every product counts.
+  triggerProductIds  String[]  @default([])
+  triggerCategoryIds String[]  @default([])
+  /// Buy 2 get 1 becomes buy 4 get 2 rather than capping at a single gift.
+  repeats            Boolean   @default(false)
+
+  /// COUPON: the code that unlocks the gift.
+  couponCode String?
+
+  reward   GiftReward @default(PRODUCT)
+  /// How many of the listed gifts the customer may take at once.
+  maxGifts Int        @default(1)
+  /// Shown on the cart while the rule is close to being met.
+  notice   String?
+
+  gifts     GiftRuleProduct[]
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  @@index([isEnabled, sortOrder])
+}
+
+model GiftRuleProduct {
+  id     String   @id @default(cuid())
+  ruleId String
+  rule   GiftRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  variantId String
+  variant   ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  @@unique([ruleId, variantId])
+  @@index([ruleId])
+}
+
+/**
+ * ---------- Wishlist ----------
+ */
+
+model WishlistItem {
+  id String @id @default(cuid())
+
+  /// Signed-in owner, or an anonymous cookie token - the same split the cart
+  /// uses, so a shopper can save things before making an account and keep
+  /// them when they do.
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  token      String?
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  /// Postgres treats NULLs as distinct, so these two constraints do not
+  /// collide: a row has either a customer or a token, never both.
+  @@unique([customerId, productId])
+  @@unique([token, productId])
+  @@index([productId])
+}
+
+/**
+ * ---------- Translations ----------
+ */
+
+/**
+ * Translation memory.
+ * Keyed on a hash of the source text rather than on a field reference, so one
+ * entry serves every place that string appears - a category name shown in the
+ * footer, the nav and a breadcrumb is translated once. Editing the English
+ * produces a new hash, which is what makes a stale translation impossible:
+ * the old entry simply stops being looked up.
+ */
+model Translation {
+  id     String @id @default(cuid())
+  locale String
+
+  /// sha256 of the trimmed source string.
+  sourceHash String
+  source     String
+  value      String
+
+  /// True when a machine produced it, so the admin can find what to review.
+  isAuto Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([locale, sourceHash])
+  @@index([locale, isAuto])
+}
+
+/// A question the shop has answered once, so the assistant can answer it
+/// every time. Deliberately question-and-answer pairs rather than long pages:
+/// retrieval scores a short, specific question far better than a paragraph
+/// buried in a policy document, and staff can see exactly what will be said.
+model KnowledgeArticle {
+  id       String  @id @default(cuid())
+  question String
+  answer   String
+  /// Extra terms a customer might use that the question does not contain -
+  /// "postage" for a question about shipping, say. Comma separated.
+  keywords String  @default("")
+  category String?
+  isActive Boolean @default(true)
+  /// How often it has actually answered someone. Tells staff which entries
+  /// earn their place and which are dead weight.
+  useCount Int     @default(0)
+
+  /// Set when the article was written to answer a specific logged question.
+  fromQuestions UnansweredQuestion[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive])
+}
+
+/// A question the assistant could not answer.
+///
+/// The point of the whole loop: every gap is recorded, identical questions
+/// are counted rather than duplicated, and staff turn the common ones into
+/// articles. Without this the knowledge base only ever contains what someone
+/// guessed customers would ask.
+model UnansweredQuestion {
+  id          String @id @default(cuid())
+  /// Lower-cased and trimmed, used to collapse repeats.
+  fingerprint String @unique
+  question    String
+  askedCount  Int    @default(1)
+
+  /// Nulled rather than cascaded when the thread is deleted - the gap it
+  /// revealed outlives the conversation that revealed it.
+  ticketId String?
+  ticket   Ticket? @relation(fields: [ticketId], references: [id], onDelete: SetNull)
+
+  /// Set once someone writes an article for it, so it drops off the list.
+  answeredById String?
+  answeredBy   KnowledgeArticle? @relation(fields: [answeredById], references: [id], onDelete: SetNull)
+  dismissedAt  DateTime?
+
+  firstAskedAt DateTime @default(now())
+  lastAskedAt  DateTime @default(now())
+
+  @@index([answeredById, dismissedAt])
+  @@index([lastAskedAt])
+}
+
+/// A rule that opens the chat before the customer asks.
+///
+/// The useful 5% of a visual flow builder, as a list. A trigger is a place, a
+/// wait, and something to say - which covers "offer help on the checkout page
+/// after 30 seconds" and "catch a full cart before it leaves" without anyone
+/// having to learn a canvas.
+model ChatTrigger {
+  id      String @id @default(cuid())
+  name    String
+  message String
+
+  /// Path prefix this applies to. Empty means every page.
+  pathPrefix   String  @default("")
+  /// Seconds on the page before it fires. Ignored for exit-intent triggers.
+  delaySeconds Int     @default(30)
+  /// Only fire when the cart is worth at least this much. 0 disables the test.
+  minCartCents Int     @default(0)
+  /// Fire when the pointer leaves towards the tab bar, instead of on a timer.
+  onExitIntent Boolean @default(false)
+
+  isActive  Boolean @default(true)
+  /// First match wins, so the specific rule is placed above the general one.
+  sortOrder Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive, sortOrder])
+}
+
+/// A full-width hero banner slide.
+///
+/// Its own table rather than more settings keys, because there can be any
+/// number of them and they need ordering. Heading, subheading and button are
+/// all optional: with none of them the slide is just the image, which is
+/// exactly what a photographic banner usually wants.
+/// A tall picture card on the home page - the "Custom categories" row.
+///
+/// Its own table rather than a Category flag: these are editorial, several can
+/// point at the same category, and the copy on the card ("Free shipping over
+/// $89") belongs to the promotion, not to the category itself.
+model PromoCard {
+  id       String @id @default(cuid())
+  imageUrl String
+  alt      String @default("")
+
+  /// Small pill above the title, e.g. "Enjoy 20% savings".
+  eyebrow  String @default("")
+  title    String @default("")
+  subtitle String @default("")
+  ctaLabel String @default("")
+  ctaHref  String @default("")
+
+  /// Colour of the copy panel. Free-form hex so the shop can match its art.
+  panelColour   String @default("#EAF7D9")
+  /// Where that panel sits on the picture: top | bottom.
+  panelPosition String @default("bottom")
+
+  isActive  Boolean @default(true)
+  sortOrder Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive, sortOrder])
+}
+
+model HeroBanner {
+  id             String  @id @default(cuid())
+  imageUrl       String
+  /// Optional narrower crop for phones; falls back to imageUrl.
+  mobileImageUrl String?
+  alt            String  @default("")
+
+  heading    String @default("")
+  subheading String @default("")
+  ctaLabel   String @default("")
+  ctaHref    String @default("")
+
+  /// Where the text block sits over the image: left | center | right.
+  textPosition String @default("left")
+
+  isActive  Boolean @default(true)
+  sortOrder Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive, sortOrder])
+}
+
+/// Proof that someone controls an email address before they are given the
+/// account attached to it.
+///
+/// Guest checkout leaves a passwordless customer record behind. Without this,
+/// anyone who knew that address could register and inherit the order history.
+model CustomerVerification {
+  id         String   @id @default(cuid())
+  /// SHA-256 of the emailed token; the token itself is never stored.
+  tokenHash  String   @unique
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  /// Already-hashed password to apply once ownership is proved. Holding it
+  /// here means the claim never writes credentials before verification.
+  pendingPasswordHash String
+  pendingName         String?
+  pendingReferredBy   String?
+
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([customerId])
+  @@index([expiresAt])
+}
+
+/**
+ * ---------- Shipping ----------
+ */
+
+/// How a method's cost is worked out.
+enum ShippingMethodType {
+  /// A cost, plus any shipping-class costs the basket triggers.
+  FLAT
+  /// Nothing to pay.
+  FREE
+  /// Collected in person, so nothing to pay.
+  PICKUP
+}
+
+/// A group of products that cost the same to post - "Bulky", "Fragile".
+model ShippingClass {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  slug        String   @unique
+  description String?
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  products Product[]
+  costs    ShippingMethodClassCost[]
+}
+
+/// One shipping choice the customer sees at checkout.
+model ShippingMethod {
+  id            String             @id @default(cuid())
+  /// What the customer is shown - "Flat rate", "Express post".
+  name          String
+  type          ShippingMethodType @default(FLAT)
+  /// Woo's "Tax status": whether the postage itself is taxed.
+  taxable       Boolean            @default(true)
+  costCents     Int                @default(0)
+  /// Free once the basket reaches this much (0 = never).
+  freeOverCents Int                @default(0)
+  /// Not offered below this much (0 = always offered).
+  minOrderCents Int                @default(0)
+  /// Shown under the name at checkout, e.g. "2-4 business days".
+  note          String?
+  isActive      Boolean            @default(true)
+  sortOrder     Int                @default(0)
+  createdAt     DateTime           @default(now())
+
+  classCosts ShippingMethodClassCost[]
+}
+
+/// What one class adds to one method's cost.
+model ShippingMethodClassCost {
+  id        String         @id @default(cuid())
+  methodId  String
+  method    ShippingMethod @relation(fields: [methodId], references: [id], onDelete: Cascade)
+  classId   String
+  class     ShippingClass  @relation(fields: [classId], references: [id], onDelete: Cascade)
+  costCents Int            @default(0)
+
+  @@unique([methodId, classId])
+  @@index([methodId])
+}
+
+/**
+ * ---------- Checkout upsell ----------
+ */
+
+/// An offer shown in the checkout's upsell block, alongside the companions set
+/// on a product screen. Targeting: every basket, a basket holding one of
+/// `triggerProducts`, a basket holding something from `triggerCategories`,
+/// and/or a minimum subtotal. Built on /admin/promotions/checkout-upsell.
+model CheckoutUpsellOffer {
+  id                String      @id @default(cuid())
+  name              String
+  isActive          Boolean     @default(true)
+  sortOrder         Int         @default(0)
+  /// Shown to every basket, whatever the triggers below say.
+  allCarts          Boolean     @default(false)
+  /// Basket subtotal in cents before this offer shows. 0 = no minimum.
+  minSubtotalCents  Int         @default(0)
+  /// What comes off each offered item: "PERCENT:20", "FIXED:500" (cents), or
+  /// empty for no discount. One column, so the two can never disagree.
+  discountRule      String      @default("")
+  startsAt          DateTime?
+  endsAt            DateTime?
+  /// The products offered.
+  products          Product[]   @relation("UpsellOfferProducts")
+  /// Basket must hold one of these products.
+  triggerProducts   Product[]   @relation("UpsellOfferTriggerProducts")
+  /// Basket must hold something from one of these categories.
+  triggerCategories Category[]  @relation("UpsellOfferTriggerCategories")
+  /// Sales attributed to this offer.
+  orderItems        OrderItem[]
+  /// Where the campaign runs: CHECKOUT, CART, THANK_YOU or NEXT_ORDER.
+  placement         String      @default("CHECKOUT")
+  /// Higher wins when several campaigns qualify for the same spot.
+  priority          Int         @default(10)
+  /// Times the campaign was shown (product placements) or a coupon was issued (next order).
+  views             Int         @default(0)
+  /// NEXT_ORDER only: how long an issued coupon lasts, and the spend it needs.
+  couponValidDays     Int       @default(30)
+  couponMinSpendCents Int       @default(0)
+  /// NEXT_ORDER only: the personal coupons this campaign has handed out.
+  coupons           Coupon[]
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  @@index([isActive])
+  @@index([placement, isActive])
+}
+
+/**
+ * ---------- Gift cards ----------
+ */
+
+enum GiftCardStatus {
+  PENDING // bought, payment not confirmed yet
+  ACTIVE
+  VOID
+}
+
+enum GiftCardDelivery {
+  RECIPIENT // emailed to the friend, copy to the buyer
+  BUYER // emailed to the buyer to hand over
+}
+
+enum GiftCardTxKind {
+  ISSUE
+  REDEEM
+  RESTORE
+  VOID
+  ADJUST
+}
+
+model GiftCard {
+  id                  String                @id @default(cuid())
+  /// Normalised, e.g. GDFR7KQ2M9XD; shown as GDFR-7KQ2-M9XD.
+  code                String                @unique
+  initialCents        Int
+  balanceCents        Int                   @default(0)
+  status              GiftCardStatus        @default(PENDING)
+  purchaseOrderId     String?
+  purchaseOrder       Order?                @relation("GiftCardPurchaseOrder", fields: [purchaseOrderId], references: [id], onDelete: SetNull)
+  purchaseOrderItemId String?               @unique
+  buyerEmail          String
+  senderName          String
+  recipientName       String
+  recipientEmail      String?
+  message             String?
+  deliverTo           GiftCardDelivery
+  issuedAt            DateTime?
+  emailedAt           DateTime?
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+  transactions        GiftCardTransaction[]
+
+  @@index([purchaseOrderId])
+  @@index([status, createdAt])
+}
+
+/// The ledger: a card's balance is the sum of its rows. One ISSUE, REDEEM,
+/// RESTORE or VOID per card per order - the unique key is what makes a
+/// repeated confirm or cancel a no-op.
+model GiftCardTransaction {
+  id          String         @id @default(cuid())
+  giftCardId  String
+  giftCard    GiftCard       @relation(fields: [giftCardId], references: [id], onDelete: Cascade)
+  kind        GiftCardTxKind
+  amountCents Int
+  orderId     String?
+  adminId     String?
+  note        String?
+  createdAt   DateTime       @default(now())
+
+  @@unique([giftCardId, kind, orderId])
+  @@index([giftCardId, createdAt])
+}

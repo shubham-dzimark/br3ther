@@ -1,0 +1,53 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "nested-cards",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision-site/assigned.html"
+        ],
+        "createdAt": "2026-11-18T07:28:00.174Z",
+        "reason": "Claude: decision sketch; the vending cabinet holding its window and panel is the direction's structure"
+      },
+      {
+        "rule": "hard-offset-shadow",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision-site/assigned.html"
+        ],
+        "createdAt": "2026-11-18T07:28:00.904Z",
+        "reason": "Claude: decision sketch; the shelf ledge is a physical edge of the machine, not a card shadow"
+      },
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision-site/r1-darkroom.html"
+        ],
+        "createdAt": "2026-11-18T10:14:23.480Z",
+        "reason": "Claude: rejected decision sketch from the bolder round; never shipped"
+      },
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision-site/r1-onebit.html"
+        ],
+        "createdAt": "2026-11-18T10:14:24.419Z",
+        "reason": "Claude: rejected decision sketch from the bolder round; never shipped"
+      },
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision-site/r1-lattice.html"
+        ],
+        "createdAt": "2026-11-18T10:14:25.843Z",
+        "reason": "Claude: rejected decision sketch from the bolder round; never shipped"
+      }
+    ]
+  }
+}

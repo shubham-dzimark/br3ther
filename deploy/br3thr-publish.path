@@ -1,0 +1,9 @@
+[Unit]
+Description=Watch for Theme Editor publish requests
+
+[Path]
+PathExists=/var/www/br3thr-publish/request
+Unit=br3thr-publish.service
+
+[Install]
+WantedBy=multi-user.target
