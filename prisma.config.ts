@@ -11,6 +11,8 @@ export default defineConfig({
     path: path.join("prisma", "migrations"),
   },
   datasource: {
-    url: process.env.DATABASE_URL as string,
+    // Migrations need a direct connection; Neon on Vercel provides it as
+    // DATABASE_URL_UNPOOLED (the pooled DATABASE_URL is for the app).
+    url: (process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL) as string,
   },
 });

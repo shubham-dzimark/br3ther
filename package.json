@@ -4,10 +4,12 @@
   "private": true,
   "scripts": {
     "dev": "next dev --webpack",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
-    "test": "tsx --env-file=.env --tsconfig tests/tsconfig.json --test tests/*.test.ts"
+    "test": "tsx --env-file=.env --tsconfig tests/tsconfig.json --test tests/*.test.ts",
+    "postinstall": "prisma generate",
+    "vercel-build": "prisma migrate deploy && node scripts/seed-br3thr-product.mjs && node scripts/bootstrap-admin.mjs && next build --webpack"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.124.0",
