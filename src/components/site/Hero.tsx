@@ -1,151 +1,294 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import gsap from "gsap";
-import { ScrollTrigger } from "gsap/ScrollTrigger";
-import { TubScene, type TubController } from "./TubScene";
+import { useEffect, useRef, useState } from "react";
+import {
+  AnimatePresence,
+  motion,
+  useAnimationControls,
+  useInView,
+  type Variants,
+} from "framer-motion";
+import { TubScene } from "./TubScene";
+import { themeOf, useFlavour } from "./Flavour";
+import { EASE, useReduce } from "./Reveal";
 
 /*
- * The first screen and the signature move.
+ * The first screen: a flavour carousel around the 3D tub.
  *
- * The name is the monument: BR · [tub] · THR across the full width, the tub
- * standing exactly where the 3 is. Scrolling holds the screen while the letters
- * part, the tub lifts out of the name, turns and opens its lid, and the four
- * facts of the tub come up around it. Without motion it is simply the first
- * screen, complete.
+ * The ground is the flavour's colour. Changing flavour grows the new colour
+ * out from behind the tub as a circle, the name rises in letter by letter, the
+ * outline counter crossfades, the tub's lid takes the new colour and the tub
+ * gives a small squash. Change it by dragging the tub, the arrow buttons, the
+ * flavour pills, the arrow keys (while the hero is on screen) or Autoplay.
+ *
+ * Autoplay advances every 3.6 s while the hero is at least half on screen, the
+ * tab is visible and nobody is pointing at or focused inside it. It is off
+ * with reduced motion, where every change is also instant.
  */
+const GLIDE = [0.25, 0.75, 0.2, 1] as const;
+const AUTOPLAY_MS = 3600;
+
+type L = { d: number; i: number };
+const letter: Variants = {
+  enter: ({ d }: L) => ({ y: d > 0 ? "110%" : "-110%", opacity: 0 }),
+  center: ({ i }: L) => ({ y: "0%", opacity: 1, transition: { duration: 0.62, ease: EASE, delay: 0.12 + i * 0.022 } }),
+  exit: ({ d, i }: L) => ({
+    y: d > 0 ? "-110%" : "110%",
+    opacity: 0,
+    transition: { duration: 0.3, ease: [0.45, 0, 0.75, 0.3], delay: i * 0.011 },
+  }),
+};
+
+const BITS = [
+  { x: "11%", y: "22%", s: 1, d: 0 },
+  { x: "84%", y: "19%", s: 0.75, d: 1 },
+  { x: "7%", y: "70%", s: 0.6, d: 2 },
+  { x: "68%", y: "13%", s: 0.5, d: 3 },
+  { x: "90%", y: "64%", s: 0.55, d: 4 },
+];
+
 export function Hero({ price }: { price: string }) {
-  const stage = useRef<HTMLDivElement>(null);
-  const slot = useRef<HTMLSpanElement>(null);
-  const tubBox = useRef<HTMLDivElement>(null);
-  const tub = useRef<TubController | null>(null);
+  const { flavours, index, flavour, dir, go, setFlavour } = useFlavour();
+  const reduce = useReduce();
+  const theme = themeOf(flavour);
+
+  const root = useRef<HTMLElement>(null);
+  const onScreen = useInView(root, { amount: 0.5 });
+  const [autoWanted, setAuto] = useState(true);
+  const auto = autoWanted && !reduce;
+  const [hold, setHold] = useState(false);
+  const touched = useRef(0);
+
+  // Grounds: the newest one grows over the last, then the older ones are dropped.
+  const [grounds, setGrounds] = useState([{ id: 0, color: theme.ground }]);
+  const [groundFor, setGroundFor] = useState(theme.ground);
+  if (groundFor !== theme.ground) {
+    // Adjusting state while rendering (not in an effect): a new ground starts growing.
+    setGroundFor(theme.ground);
+    setGrounds((gs) => [...gs.slice(-2), { id: gs[gs.length - 1].id + 1, color: theme.ground }]);
+  }
+
+  const squash = useAnimationControls();
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current) { first.current = false; return; }
+    if (!reduce) squash.start({ scaleX: [1, 1.05, 0.98, 1], scaleY: [1, 0.94, 1.03, 1], transition: { duration: 0.55, ease: "easeOut" } });
+  }, [flavour, reduce, squash]);
+
+  const step = (d: number) => { touched.current = Date.now(); go(d); };
 
   useEffect(() => {
-    const st = stage.current, sl = slot.current, box = tubBox.current;
-    if (!st || !sl || !box) return;
+    if (!auto || !onScreen || hold) return;
+    const t = window.setInterval(() => {
+      if (document.hidden || Date.now() - touched.current < AUTOPLAY_MS) return;
+      go(1);
+    }, AUTOPLAY_MS);
+    return () => window.clearInterval(t);
+  }, [auto, onScreen, hold, go]);
 
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const narrowNow = () => window.matchMedia("(max-width: 760px)").matches;
-
-    /*
-     * The box is drawn at the size the tub reaches at the end of the scene, so
-     * the canvas renders sharp, and is scaled DOWN to stand in the slot, where
-     * the tub is about one capital tall. The scene then only scales it up to 1.
-     */
-    let slotScale = 1;
-    const place = () => {
-      const s = st.getBoundingClientRect();
-      const r = sl.getBoundingClientRect();
-      const slotSide = r.height * 1.95;
-      const big = reduce ? slotSide : st.clientHeight * (narrowNow() ? 0.48 : 0.76);
-      slotScale = slotSide / big;
-      box.style.width = `${big}px`;
-      box.style.height = `${big}px`;
-      box.style.left = `${r.left - s.left + r.width / 2 - big / 2}px`;
-      box.style.top = `${r.top - s.top + r.height / 2 - big / 2 - r.height * 0.02}px`;
-      box.style.transformOrigin = "50% 50%";
-      // xPercent/yPercent clear the no-script centring in the stylesheet.
-      gsap.set(box, { xPercent: 0, yPercent: 0, x: 0, y: 0, scale: slotScale });
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!onScreen || e.altKey || e.ctrlKey || e.metaKey) return;
+      const t = e.target as HTMLElement;
+      if (t.closest("input, select, textarea, [contenteditable]")) return;
+      if (e.key === "ArrowRight") { e.preventDefault(); touched.current = Date.now(); go(1); }
+      if (e.key === "ArrowLeft") { e.preventDefault(); touched.current = Date.now(); go(-1); }
     };
-    place();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onScreen, go]);
 
-    if (reduce) {
-      const ro = new ResizeObserver(place);
-      ro.observe(st);
-      return () => ro.disconnect();
-    }
-
-    gsap.registerPlugin(ScrollTrigger);
-    const mm = gsap.matchMedia();
-    mm.add({ wide: "(min-width: 761px)", narrow: "(max-width: 760px)" }, () => {
-      const left = st.querySelector(".part--l"), right = st.querySelector(".part--r");
-      const foot = st.querySelector(".hero__foot");
-      const callouts = st.querySelectorAll(".callout");
-      const title = st.querySelector(".hero__scenetitle");
-      place();
-
-      const tl = gsap.timeline({
-        defaults: { ease: "none" },
-        scrollTrigger: {
-          trigger: st,
-          start: "top top",
-          end: narrowNow() ? "+=130%" : "+=170%",
-          pin: true,
-          scrub: 0.6,
-          anticipatePin: 1,
-          invalidateOnRefresh: true,
-          onRefreshInit: () => { gsap.set(box, { x: 0, y: 0 }); place(); },
-          onUpdate: (self) => tub.current?.setProgress(Math.max(0, (self.progress - 0.25) / 0.75)),
-        },
-      });
-      // The ground turns to studio grey as the tub leaves the name: a backdrop for the product.
-      tl.to(st, { backgroundColor: "#ececea", duration: 0.3 }, 0.02)
-        .to(foot, { opacity: 0, y: 24, duration: 0.15 }, 0)
-        .to(left, { xPercent: -70, autoAlpha: 0, duration: 0.3 }, 0.02)
-        .to(right, { xPercent: 70, autoAlpha: 0, duration: 0.3 }, 0.02)
-        .to(
-          box,
-          {
-            duration: 0.35,
-            // From the slot to the middle of the screen, at full size.
-            x: () => st.clientWidth / 2 - (box.offsetLeft + box.offsetWidth / 2),
-            y: () => st.clientHeight * (narrowNow() ? 0.52 : 0.58) - (box.offsetTop + box.offsetHeight / 2),
-            scale: 1,
-          },
-          0.02,
-        )
-        .to(title, { opacity: 1, duration: 0.12 }, 0.32)
-        .to(callouts, { opacity: 1, y: 0, stagger: 0.1, duration: 0.12 }, 0.45)
-        .to({}, { duration: 0.15 });
-      gsap.set(callouts, { y: 20 });
-
-      // A short entrance on load: the letters rise, the tub settles in. These
-      // move the inner shapes, never the parts the scroll timeline owns.
-      const letters = st.querySelectorAll(".hero__name .ink");
-      gsap.from(letters, { yPercent: 22, opacity: 0, duration: 1.1, ease: "power4.out", stagger: 0.06, delay: 0.1 });
-      if (box.firstElementChild) {
-        gsap.from(box.firstElementChild, { opacity: 0, yPercent: 8, duration: 1.3, ease: "power4.out", delay: 0.3 });
-      }
-    });
-
-    return () => mm.revert();
-  }, []);
+  const prev = flavours[(index - 1 + flavours.length) % flavours.length];
+  const next = flavours[(index + 1) % flavours.length];
+  const words = flavour.toUpperCase().split(" ");
+  let li = 0;
 
   return (
-    <section className="hero" aria-labelledby="hero-title">
-      <div className="hero__stage" ref={stage}>
-        <h1 id="hero-title" className="hero__name" aria-label="BR3THR, No.3 Daily Blend">
-          <span className="part part--l">
-            <span className="ink">BR</span>
-          </span>
-          <span className="hero__slot" ref={slot} aria-hidden="true" />
-          <span className="part part--r">
-            <span className="ink">THR</span>
-          </span>
-        </h1>
+    <section
+      ref={root}
+      className="hero"
+      aria-labelledby="hero-title"
+      aria-roledescription="carousel"
+      onPointerEnter={(e) => e.pointerType === "mouse" && setHold(true)}
+      onPointerLeave={() => setHold(false)}
+      onFocusCapture={() => setHold(true)}
+      onBlurCapture={() => setHold(false)}
+    >
+      {grounds.map((g, i) => (
+        <motion.div
+          key={g.id}
+          className="hero__ground"
+          aria-hidden="true"
+          style={{ background: g.color }}
+          initial={g.id === 0 ? false : { clipPath: "circle(0% at 50% 44%)" }}
+          animate={{ clipPath: "circle(150% at 50% 44%)" }}
+          transition={{ duration: reduce ? 0 : 0.9, ease: GLIDE }}
+          onAnimationComplete={() => i > 0 && setGrounds((gs) => gs.filter((x) => x.id >= g.id))}
+        />
+      ))}
+      <motion.div
+        className="hero__rings"
+        aria-hidden="true"
+        initial={reduce ? false : { opacity: 0, scale: 0.85 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 1.1, ease: "easeOut" }}
+      />
+      {BITS.map((b) => (
+        <motion.span
+          key={b.d}
+          className="hero__bit"
+          aria-hidden="true"
+          style={{ left: b.x, top: b.y, ["--s" as string]: b.s }}
+          initial={reduce ? false : { opacity: 0 }}
+          animate={
+            reduce
+              ? { opacity: 0.4, backgroundColor: theme.bit }
+              : {
+                  opacity: 0.42,
+                  backgroundColor: theme.bit,
+                  y: [0, -22 - b.d * 3, 0],
+                  x: [0, b.d % 2 ? 12 : -12, 0],
+                  rotate: [0, b.d % 2 ? 10 : -10, 0],
+                }
+          }
+          transition={{
+            opacity: { duration: 0.9, delay: 0.3 + b.d * 0.09 },
+            backgroundColor: { duration: 0.6 },
+            default: { duration: 7 + b.d * 0.9, repeat: Infinity, ease: "easeInOut" },
+          }}
+        />
+      ))}
 
-        <div className="hero__tub" ref={tubBox}>
-          <TubScene controllerRef={tub} className="hero__tubcanvas" />
-        </div>
+      <h1 id="hero-title" className="sr-only">BR3THR No.3 Daily Blend</h1>
+      <p className="sr-only" aria-live="polite">
+        {flavour}, flavour {index + 1} of {flavours.length}
+      </p>
 
-        <p className="hero__scenetitle h2" aria-hidden="true">The tub, taken apart</p>
-        <ul className="hero__callouts" aria-label="The tub in four facts">
-          <li className="callout"><b>300 g</b>in every tub, sealed under the lid</li>
-          <li className="callout"><b>30</b>scoops, one a day, one month</li>
-          <li className="callout"><b>10 g</b>measured scoop, packed inside</li>
-          <li className="callout"><b>¼ turn</b>to close the lid tight again</li>
-        </ul>
+      <div className="hero__count" aria-hidden="true">
+        <AnimatePresence mode="popLayout" initial={false}>
+          <motion.span
+            key={index}
+            initial={{ opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0, transition: { duration: reduce ? 0 : 0.38, ease: EASE, delay: reduce ? 0 : 0.06 } }}
+            exit={{ opacity: 0, y: -10, transition: { duration: reduce ? 0 : 0.22, ease: [0.5, 0, 0.75, 0] } }}
+          >
+            {String(index + 1).padStart(2, "0")}
+          </motion.span>
+        </AnimatePresence>
+      </div>
 
-        <div className="hero__foot">
-          <p className="hero__lede">No.3 Daily Blend, a daily supplement. One tub, thirty scoops, one month.</p>
-          <div className="hero__cta">
-            <span className="price">{price}</span>
-            <a className="btn" href="#buy">
-              Buy No.3 <span className="arrow" aria-hidden="true">→</span>
-            </a>
+      <motion.div
+        className="hero__tub"
+        drag={reduce ? false : "x"}
+        dragConstraints={{ left: 0, right: 0 }}
+        dragElastic={0.22}
+        dragSnapToOrigin
+        onDragEnd={(_, info) => {
+          if (info.offset.x < -60 || info.velocity.x < -450) step(1);
+          else if (info.offset.x > 60 || info.velocity.x > 450) step(-1);
+        }}
+        whileDrag={{ cursor: "grabbing" }}
+        initial={reduce ? false : { opacity: 0, y: 80, scale: 0.88 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: 1.3, ease: [0.16, 1, 0.3, 1], delay: 0.15 }}
+      >
+        <motion.div className="hero__tubin" animate={squash}>
+          <TubScene flavour={flavour} className="hero__tubcanvas" idleSpin interactive />
+        </motion.div>
+      </motion.div>
+
+      <div className="hero__title" aria-hidden="true">
+        <AnimatePresence mode="popLayout" initial={false} custom={dir}>
+          <motion.span key={flavour} className="hero__name" custom={dir}>
+            {words.map((w, wi) => (
+              <span key={wi} className="hero__w">
+                {w.split("").map((ch) => {
+                  const n = li++;
+                  return (
+                    <span key={n} className="mask">
+                      <motion.span
+                        className="mask__in"
+                        custom={{ d: dir, i: n }}
+                        variants={letter}
+                        initial={reduce ? false : "enter"}
+                        animate={reduce ? { y: "0%", opacity: 1 } : "center"}
+                        exit={reduce ? { opacity: 0, transition: { duration: 0 } } : "exit"}
+                      >
+                        {ch}
+                      </motion.span>
+                    </span>
+                  );
+                })}
+              </span>
+            ))}
+          </motion.span>
+        </AnimatePresence>
+      </div>
+
+      <div className="hero__arrows">
+        <button type="button" className="hero__arrow" onClick={() => step(-1)} aria-label={`Previous flavour: ${prev}`}>
+          <Arrow flip />
+        </button>
+        <button type="button" className="hero__arrow hero__arrow--main" onClick={() => step(1)} aria-label={`Next flavour: ${next}`}>
+          <Arrow />
+        </button>
+      </div>
+
+      <button
+        type="button"
+        className="hero__auto"
+        aria-pressed={auto}
+        onClick={() => { setAuto((a) => !a); touched.current = Date.now(); }}
+      >
+        <span className="hero__autoring" aria-hidden="true">
+          {auto ? (
+            <svg viewBox="0 0 12 12"><rect x="2.5" y="2" width="2.4" height="8" rx="1" /><rect x="7.1" y="2" width="2.4" height="8" rx="1" /></svg>
+          ) : (
+            <svg viewBox="0 0 12 12"><path d="M3.5 2.2v7.6L10 6z" /></svg>
+          )}
+        </span>
+        Autoplay
+      </button>
+
+      <motion.div
+        className="hero__foot"
+        initial={reduce ? false : { opacity: 0, y: 24 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.8, ease: EASE, delay: 0.6 }}
+      >
+        <div className="hero__left">
+          <p className="hero__lede">No.3 Daily Blend. One tub, thirty scoops, one month.</p>
+          <div className="hero__pills" role="group" aria-label="Flavour">
+            {flavours.map((f) => (
+              <button
+                key={f}
+                type="button"
+                className="pill"
+                aria-pressed={f === flavour}
+                onClick={() => { touched.current = Date.now(); setFlavour(f); }}
+              >
+                <span className="pill__dot" style={{ background: themeOf(f).deep }} aria-hidden="true" />
+                {f}
+                {f === flavour ? <motion.span layoutId="pill-on" className="pill__on" transition={{ type: "spring", stiffness: 420, damping: 34 }} /> : null}
+              </button>
+            ))}
           </div>
         </div>
-      </div>
+        <div className="hero__cta">
+          <span className="price">from {price}</span>
+          <motion.a className="btn" href="#buy" whileHover={reduce ? undefined : { y: -2 }} whileTap={reduce ? undefined : { scale: 0.97 }}>
+            Buy {flavour} <span className="arrow" aria-hidden="true">→</span>
+          </motion.a>
+        </div>
+      </motion.div>
     </section>
+  );
+}
+
+function Arrow({ flip }: { flip?: boolean }) {
+  return (
+    <svg viewBox="0 0 20 20" aria-hidden="true" style={flip ? { transform: "scaleX(-1)" } : undefined}>
+      <path d="M3 10h13M11 4.5 16.5 10 11 15.5" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }

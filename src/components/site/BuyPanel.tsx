@@ -4,6 +4,8 @@ import { useMemo, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { buyNow } from "@/app/(site)/checkout-actions";
 import { TubScene, FLAVOUR_LIDS } from "./TubScene";
+import { themeOf, useFlavour } from "./Flavour";
+import { SplitHeading } from "./Reveal";
 
 type Variant = { id: string; flavour: string; size: string; priceCents: number; available: number };
 type Gateway = { key: string; title: string; description: string; available: boolean; reason: string | null };
@@ -45,7 +47,9 @@ export function BuyPanel({
   prefill: { email: string; name: string };
 }) {
   const start = variants.find((v) => v.id === defaultVariantId) ?? variants[0];
-  const [flavour, setFlavour] = useState(start.flavour);
+  // Shared with the hero: the flavour chosen there is the one in the basket.
+  const { flavour: shared, setFlavour } = useFlavour();
+  const flavour = flavours.includes(shared) ? shared : start.flavour;
   const [size, setSize] = useState(start.size);
   const [qty, setQty] = useState(1);
 
@@ -62,7 +66,7 @@ export function BuyPanel({
     <section id="buy" className="buy sec" aria-labelledby="buy-title" tabIndex={-1}>
       <div className="grid12 buy__grid">
         <div className="buy__visual">
-          <div className="tubbox">
+          <div className="tubbox" style={{ background: themeOf(flavour).ground }}>
             <TubScene
               flavour={flavour}
               detail={`${size.toUpperCase()}  ·  ${Math.round((parseInt(size, 10) || 300) / 10)} SERVINGS`}
@@ -76,7 +80,7 @@ export function BuyPanel({
         </div>
 
         <form className="buy__form" action={buyNow}>
-          <h2 id="buy-title" className="h2" data-split>Take it home</h2>
+          <SplitHeading id="buy-title" className="poster buy__title" text="Take it home" />
           <p className="lead">One tub ships in a plain box. Pay by e-Transfer or crypto once the order is in.</p>
 
           {error && ERRORS[error] ? (

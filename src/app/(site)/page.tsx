@@ -7,7 +7,8 @@ import { getSessionUser } from "@/lib/auth";
 import { Hero } from "@/components/site/Hero";
 import { BuyPanel } from "@/components/site/BuyPanel";
 import { Inside } from "@/components/site/Inside";
-import { Motion } from "@/components/site/Motion";
+import { FlavourProvider } from "@/components/site/Flavour";
+import { Reveal, RevealItem, SplitHeading } from "@/components/site/Reveal";
 import { SiteHeader, BuyBar } from "@/components/site/Chrome";
 import { Footer } from "@/components/site/Footer";
 
@@ -30,6 +31,12 @@ const FAQ: [string, string][] = [
   ["How do I follow my order?", "Use Track order with your order number and email, or sign in to see every order you've placed."],
 ];
 
+const HOW = [
+  { title: "Day one", text: "One level scoop, 10 g, into 300 ml of cold water. Shake for twenty seconds until it’s clear.", img: "/site/stairs-cc0.webp", alt: "White concrete steps climbing a sunlit wall" },
+  { title: "Week one", text: "Same time every day. Most people take it in the morning, before anything else, so it never gets skipped.", img: "/site/photo-134.jpg", alt: "A steel truss bridge seen from below" },
+  { title: "Day thirty", text: "Thirty scoops and one empty tub. Order the next one in the last week and it arrives before you run out.", img: "/site/photo-693.jpg", alt: "A suspension bridge tower rising out of fog above cliffs" },
+];
+
 export default async function HomePage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const [{ error }, product, customer, admin] = await Promise.all([
     searchParams,
@@ -44,80 +51,50 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
     ? await checkoutGateways({ subtotalCents: fromCents, isAdmin: Boolean(admin) })
     : [];
 
+  const defaultFlavour = product?.variants.find((v) => v.id === product.defaultVariantId)?.flavour;
+
   return (
-    <>
+    <FlavourProvider flavours={product?.flavours ?? ["Unflavoured", "Black cherry", "Citrus salt"]} initial={defaultFlavour}>
       <a href="#main" className="sr-only">Skip to content</a>
       <SiteHeader signedIn={Boolean(customer)} />
       <main id="main">
         <Hero price={price} />
 
+        <Inside />
+
         {/* ---- one product ---- */}
-        <section className="sec intro" aria-labelledby="intro-title">
-          <div className="grid12" data-reveal>
-            <h2 id="intro-title" className="h2 intro__head" data-split>One product</h2>
-            <p className="intro__text" data-r>
+        <section className="sec statement" aria-labelledby="intro-title">
+          <SplitHeading id="intro-title" className="kicker-head" text="One product" />
+          <Reveal className="statement__grid">
+            <RevealItem as="p" className="statement__text">
               Br3thr makes one thing: a tub you finish in a month and reorder without thinking, because the scoop, the
               mix and the taste never change.
-            </p>
-            <figure className="intro__photo" data-r data-drift style={{ overflow: "hidden" }}>
-              <Image src="/site/photo-855.jpg" alt="A person walking past a tall white corrugated wall" width={1600} height={1000} sizes="(max-width: 760px) 70vw, 33vw" style={{ objectPosition: "85% 50%" }} />
-            </figure>
-            <p className="intro__note muted" data-r>
+            </RevealItem>
+            <RevealItem as="figure" className="statement__photo">
+              <Image src="/site/photo-855.jpg" alt="A person walking past a tall white corrugated wall" width={1600} height={1000} sizes="(max-width: 760px) 92vw, 40vw" style={{ objectPosition: "85% 50%" }} />
+            </RevealItem>
+            <RevealItem as="p" className="statement__note muted">
               The name is short for brother. The 3 stands in for the letters you skip when you say it fast, and it is the
               number on the tub. Brothers share what works; this is the thing worth sharing.
-            </p>
-          </div>
+            </RevealItem>
+          </Reveal>
         </section>
-
-        {/* ---- the band ---- */}
-        <section className="sec" aria-labelledby="band-title">
-          <h2 id="band-title" className="h2 band__head" data-split>Every day starts somewhere</h2>
-          <div className="band" data-shutter>
-            <figure style={{ ["--g" as string]: 5 }}>
-              <Image src="/site/photo-1033.jpg" alt="An empty concourse with two escalators under a skylight" width={1600} height={1000} sizes="45vw" />
-              <figcaption className="band__title">Early, before anyone else</figcaption>
-            </figure>
-            <figure style={{ ["--g" as string]: 2 }}>
-              <Image src="/site/photo-508.jpg" alt="Pointed vaults and pale columns of a church interior" width={1200} height={1500} sizes="18vw" />
-            </figure>
-            <figure style={{ ["--g" as string]: 3 }}>
-              <Image src="/site/photo-677.jpg" alt="Four tower corners framing a cross of bright sky" width={1600} height={1200} sizes="27vw" />
-            </figure>
-            <figure style={{ ["--g" as string]: 2 }}>
-              <Image src="/site/photo-520.jpg" alt="A suspension bridge tower between brick buildings" width={1200} height={1500} sizes="18vw" />
-            </figure>
-          </div>
-          <p className="band__cap muted">Same scoop at home, at the gym and on the road. The tub travels; the habit stays.</p>
-        </section>
-
-        <Inside />
 
         {/* ---- how to ---- */}
         <section id="how" className="sec how" aria-labelledby="how-title" tabIndex={-1}>
-          <div className="grid12" data-reveal>
-            <h2 id="how-title" className="h2 how__head" data-split>How to take it</h2>
-            <figure className="how__p1" data-r data-drift style={{ overflow: "hidden" }}>
-              <Image src="/site/stairs-cc0.webp" alt="White concrete steps climbing a sunlit wall" width={1024} height={683} sizes="(max-width: 760px) 100vw, 33vw" />
-            </figure>
-            <p className="how__t1" data-r>
-              <b>On the first day,</b> take one level scoop, 10 g, into 300 ml of cold water. Shake for twenty seconds until
-              it&rsquo;s clear.
-            </p>
-            <figure className="how__p2" data-r style={{ overflow: "hidden" }}>
-              <Image src="/site/photo-134.jpg" alt="A steel truss bridge seen from below" width={1200} height={1500} sizes="(max-width: 760px) 62vw, 25vw" />
-            </figure>
-            <p className="how__t2" data-r>
-              <b>A week later,</b> it&rsquo;s the same time every day. Most people take it in the morning, before anything
-              else, so it never gets skipped.
-            </p>
-            <figure className="how__p3" data-r data-drift style={{ overflow: "hidden" }}>
-              <Image src="/site/photo-693.jpg" alt="A suspension bridge tower rising out of fog above cliffs" width={1600} height={1000} sizes="(max-width: 760px) 78vw, 42vw" />
-            </figure>
-            <p className="how__t3" data-r>
-              <b>By the end,</b> thirty scoops and one empty tub. Order the next one in the last week and it arrives before
-              you run out.
-            </p>
-          </div>
+          <SplitHeading id="how-title" className="poster how__head" text="How to take it" />
+          <Reveal as="ol" className="how__cards">
+            {HOW.map((h, i) => (
+              <RevealItem as="li" key={h.title} className="how__card">
+                <span className="how__num" aria-hidden="true">{String(i + 1).padStart(2, "0")}</span>
+                <figure className="how__photo">
+                  <Image src={h.img} alt={h.alt} width={1200} height={900} sizes="(max-width: 760px) 92vw, 30vw" />
+                </figure>
+                <h3>{h.title}</h3>
+                <p>{h.text}</p>
+              </RevealItem>
+            ))}
+          </Reveal>
         </section>
 
         {product ? (
@@ -140,28 +117,28 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
         {/* ---- questions ---- */}
         <section id="faq" className="sec faq" aria-labelledby="faq-title" tabIndex={-1}>
           <div className="grid12">
-            <h2 id="faq-title" className="h2 faq__head" style={{ gridColumn: "1 / -1" }} data-split>
-              Questions before you buy
-            </h2>
-            <div className="faq__list">
+            <SplitHeading id="faq-title" className="poster faq__head" text="Questions before you buy" />
+            <Reveal className="faq__list">
               {FAQ.map(([q, a]) => (
-                <details key={q}>
-                  <summary>
-                    {q}
-                    <svg className="chev" viewBox="0 0 14 14" aria-hidden="true">
-                      <path d="M2 5l5 5 5-5" fill="none" stroke="currentColor" strokeWidth="2" />
-                    </svg>
-                  </summary>
-                  <p>{a}</p>
-                </details>
+                <RevealItem key={q}>
+                  <details>
+                    <summary>
+                      {q}
+                      <svg className="chev" viewBox="0 0 14 14" aria-hidden="true">
+                        <path d="M2 5l5 5 5-5" fill="none" stroke="currentColor" strokeWidth="2" />
+                      </svg>
+                    </summary>
+                    <p>{a}</p>
+                  </details>
+                </RevealItem>
               ))}
-            </div>
+            </Reveal>
           </div>
         </section>
 
         {/* ---- close ---- */}
         <section className="close on-dark" aria-labelledby="close-title">
-          <h2 id="close-title" className="display close__head" data-split>Same scoop. Every day.</h2>
+          <SplitHeading id="close-title" className="poster close__head" text="Same scoop. Every day." />
           <div className="close__foot">
             <p>One tub lasts a month. Order today and the first scoop is on its way this week.</p>
             <a className="btn btn--light" href="#buy">
@@ -172,7 +149,6 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
       </main>
       <Footer signedIn={Boolean(customer)} />
       <BuyBar price={price} />
-      <Motion />
-    </>
+    </FlavourProvider>
   );
 }

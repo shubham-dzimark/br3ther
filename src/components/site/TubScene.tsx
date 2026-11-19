@@ -171,7 +171,8 @@ export function TubScene({
         back(W);
         labelTex.needsUpdate = true;
       };
-      drawLabel(flavour);
+      // The scene builds asynchronously; read the latest flavour, not the one from the first render.
+      drawLabel(currentFlavour.current);
       const labelGeo = track(new THREE.CylinderGeometry(1.006, 1.006, 1.14, 160, 1, true, Math.PI, Math.PI * 2));
       const labelMat = track(new THREE.MeshStandardMaterial({ map: labelTex, transparent: true, roughness: 0.55 }));
       const labelMesh = new THREE.Mesh(labelGeo, labelMat);
@@ -181,7 +182,7 @@ export function TubScene({
       // ---- lid ----
       const lid = new THREE.Group();
       const lidMat = track(
-        new THREE.MeshPhysicalMaterial({ color: new THREE.Color(FLAVOUR_LIDS[flavour] ?? "#ecece8"), roughness: 0.5, clearcoat: 0.3 }),
+        new THREE.MeshPhysicalMaterial({ color: new THREE.Color(FLAVOUR_LIDS[currentFlavour.current] ?? "#ecece8"), roughness: 0.5, clearcoat: 0.3 }),
       );
       const lidGeo = track(new THREE.CylinderGeometry(1.04, 1.045, 0.3, 160));
       const lidBody = new THREE.Mesh(lidGeo, lidMat);
@@ -238,7 +239,7 @@ export function TubScene({
       let progress = 0;
       let spin = 0;
       let tiltX = 0, tiltY = 0, tTiltX = 0, tTiltY = 0;
-      const targetLid = new THREE.Color(FLAVOUR_LIDS[flavour] ?? "#ecece8");
+      const targetLid = new THREE.Color(FLAVOUR_LIDS[currentFlavour.current] ?? "#ecece8");
       let dirty = true;
       const smooth = (a: number, b: number, x: number) => {
         const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
@@ -284,7 +285,8 @@ export function TubScene({
         tiltY += (tTiltY - tiltY) * 0.08;
         const lidC = lidMat.color;
         if (Math.abs(lidC.r - targetLid.r) + Math.abs(lidC.g - targetLid.g) + Math.abs(lidC.b - targetLid.b) > 0.002) {
-          lidC.lerp(targetLid, 0.12);
+          // time-based, so the lid lands in ~0.4 s at any frame rate
+          lidC.lerp(targetLid, 1 - Math.exp(-dt * 8));
           dirty = true;
         }
         const lift = smooth(0.42, 0.72, progress);

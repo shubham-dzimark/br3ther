@@ -1,14 +1,36 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { motion, useMotionValueEvent, useScroll } from "framer-motion";
 import { WordSvg, BR3THR } from "./Wordmark";
+import { useReduce } from "./Reveal";
 
-/** Top bar: wordmark, four section links, sign in, one action. */
+/**
+ * Top bar: wordmark, section links, sign in, one action. It sits clear over
+ * the hero, takes a frosted ground once the page moves, slides away while
+ * scrolling down and comes back on the way up.
+ */
 export function SiteHeader({ signedIn }: { signedIn: boolean }) {
   const [open, setOpen] = useState(false);
+  const [solid, setSolid] = useState(false);
+  const [hidden, setHidden] = useState(false);
+  const last = useRef(0);
+  const reduce = useReduce();
+  const { scrollY } = useScroll();
+  useMotionValueEvent(scrollY, "change", (y) => {
+    setSolid(y > 24);
+    setHidden(y > last.current && y > 480 && !open);
+    last.current = y;
+  });
   return (
-    <header className="site-head">
+    <motion.header
+      className="site-head"
+      data-solid={solid || open}
+      initial={reduce ? false : { y: "-110%" }}
+      animate={{ y: hidden ? "-110%" : "0%" }}
+      transition={{ duration: hidden ? 0.35 : 0.6, ease: [0.22, 0.9, 0.24, 1] }}
+    >
       <Link className="mark" href="/" aria-label="BR3THR home">
         <WordSvg letters={BR3THR} />
       </Link>
@@ -29,7 +51,7 @@ export function SiteHeader({ signedIn }: { signedIn: boolean }) {
         <Link href={signedIn ? "/account" : "/account/login"}>{signedIn ? "Account" : "Sign in"}</Link>
       </nav>
       <Link className="btn" href="/#buy">Buy</Link>
-    </header>
+    </motion.header>
   );
 }
 
