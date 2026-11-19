@@ -674,21 +674,19 @@ html:has(.site) { scroll-behavior: smooth; }
 .wordloader { position: relative; display: flex; align-items: center; justify-content: center; gap: 0.12em; width: 100%; }
 .wordloader__defs { position: absolute; width: 0; height: 0; overflow: hidden; }
 .wordloader__letter { display: block; flex: 1 1 0; min-width: 0; max-width: 96px; height: auto; aspect-ratio: 1; overflow: visible; }
-.wl-dash { animation: wlDashArray 2s ease-in-out infinite, wlDashOffset 2s linear infinite; }
-.wl-spin { animation: wlSpinDashArray 2s ease-in-out infinite, wlDashOffset 2s linear infinite; }
-@keyframes wlDashArray {
-  0% { stroke-dasharray: 0 1 359 0; }
-  50% { stroke-dasharray: 0 359 1 0; }
-  100% { stroke-dasharray: 359 1 0 0; }
+/* Each letter draws on in turn (left to right), the whole word holds, then
+   it retracts and the cycle starts again: 3 s, the full word visible for
+   over a second of it. */
+.wl-dash, .wl-spin {
+  stroke-dasharray: 360 380;
+  stroke-dashoffset: 368;
+  animation: wlDraw 3s cubic-bezier(.65, 0, .35, 1) infinite both;
 }
-@keyframes wlSpinDashArray {
-  0% { stroke-dasharray: 270 90; }
-  50% { stroke-dasharray: 0 360; }
-  100% { stroke-dasharray: 270 90; }
-}
-@keyframes wlDashOffset {
-  0% { stroke-dashoffset: 365; }
-  100% { stroke-dashoffset: 5; }
+@keyframes wlDraw {
+  0%   { stroke-dashoffset: 368; }
+  32%  { stroke-dashoffset: 0; }
+  78%  { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: -368; }
 }
 @media (prefers-reduced-motion: reduce) {
   .wl-dash, .wl-spin { animation: none; stroke-dasharray: none; }

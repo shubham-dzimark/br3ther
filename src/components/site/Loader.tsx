@@ -98,8 +98,9 @@ export function SiteLoader({ ground }: { ground: string }) {
     const finish = () => {
       if (done) return;
       done = true;
-      // Let the wordmark finish rising before the curtain lifts.
-      const wait = Math.max(0, 1000 - (performance.now() - started));
+      // Hold until the word has been drawn and seen whole (letters finish
+      // drawing ~1.4 s in), so the curtain never lifts mid-stroke.
+      const wait = Math.max(0, 1650 - (performance.now() - started));
       window.setTimeout(() => {
         creep.stop();
         animate(progress, 1, { duration: 0.35, ease: "easeOut" }).then(() => setShow(false));

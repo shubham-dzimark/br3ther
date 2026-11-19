@@ -1,8 +1,8 @@
 /*
- * BR3THR spelled in self-drawing strokes: each letter is one stroked path
- * whose dash draws on, travels along and retracts on a loop (after the
- * Uiverse "YOU" loader by SelfMadeSystem). The 3, like the O there, gets the
- * ring timing and a gradient that turns in steps. Colours are the shop's:
+ * BR3THR spelled in self-drawing strokes (after the Uiverse "YOU" loader by
+ * SelfMadeSystem): the letters draw on one after another, the whole word
+ * holds, then they retract together, on a 3-second loop. The 3 keeps its
+ * gradient that turns in steps. Colours are the shop's:
  * ink and Black cherry for the letters, Citrus salt to Black cherry for the 3.
  * With reduced motion the letters are simply drawn in full.
  *
@@ -56,7 +56,7 @@ export function WordLoader({ className = "" }: { className?: string }) {
             strokeLinejoin="round"
             pathLength={360}
             className={l.spin ? "wl-spin" : "wl-dash"}
-            style={{ animationDelay: `${i * -0.18}s` }}
+            style={{ animationDelay: `${i * 0.09}s` }}
           />
         </svg>
       ))}
