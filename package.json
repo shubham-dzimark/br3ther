@@ -9,7 +9,7 @@
     "lint": "eslint",
     "test": "tsx --env-file=.env --tsconfig tests/tsconfig.json --test tests/*.test.ts",
     "postinstall": "prisma generate",
-    "vercel-build": "prisma db push && node scripts/seed-br3thr-product.mjs && node scripts/bootstrap-admin.mjs && next build --webpack"
+    "vercel-build": "node scripts/db-sync.mjs && node scripts/seed-br3thr-product.mjs && node scripts/bootstrap-admin.mjs && next build --webpack"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.124.0",
