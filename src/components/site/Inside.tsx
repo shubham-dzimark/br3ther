@@ -8,8 +8,8 @@ import {
   useScroll,
   useSpring,
 } from "framer-motion";
-import { TubScene, type TubController } from "./TubScene";
-import { themeOf, useFlavour } from "./Flavour";
+import { travelTub } from "./Traveller";
+import { useFlavour } from "./Flavour";
 import { EASE, useReduce } from "./Reveal";
 
 /*
@@ -19,27 +19,22 @@ import { EASE, useReduce } from "./Reveal";
  * crossfades the headline, the caption and the outline step number. The step
  * buttons jump to a step. Screen readers get all four steps as one list.
  *
- * The formula is sample content for the demo product; replace before launch.
+ * The title, steps and note are edited in Admin > Home Page Control.
  */
-const STEPS = [
-  { head: "Six things, all named", cap: "Creatine 3 g, electrolytes 600 mg, magnesium 150 mg, vitamin D3 25 µg, citric acid, natural flavour.", icon: "leaf" },
-  { head: "Nothing hidden", cap: "No added sugar, no sweeteners, no fillers, no colour. Every amount is on the label.", icon: "grain" },
-  { head: "Thirty scoops", cap: "300 g of powder and a measured 10 g scoop packed inside. One a day lasts a month.", icon: "scoop" },
-  { head: "A quarter turn", cap: "A foil seal under the lid, and it closes tight with one twist. The tub is recyclable PP 5.", icon: "lid" },
-] as const;
+const ICONS = ["leaf", "grain", "scoop", "lid"] as const;
+type Step = { head: string; cap: string };
 
-export function Inside() {
-  const { flavour } = useFlavour();
+export function Inside({ title, steps: STEPS, note }: { title: string; steps: Step[]; note: string }) {
+  const { flavour, look } = useFlavour();
   const reduce = useReduce();
   const root = useRef<HTMLElement>(null);
-  const tub = useRef<TubController | null>(null);
   const [step, setStep] = useState(0);
 
   const { scrollYProgress } = useScroll({ target: root, offset: ["start start", "end end"] });
   const bar = useSpring(scrollYProgress, { stiffness: 160, damping: 30, mass: 0.4 });
 
   useMotionValueEvent(scrollYProgress, "change", (p) => {
-    tub.current?.setProgress(p);
+    travelTub.current?.setProgress(p);
     const s = Math.min(STEPS.length - 1, Math.floor(p * STEPS.length));
     setStep((cur) => (cur === s ? cur : s));
   });
@@ -65,7 +60,7 @@ export function Inside() {
       className="inside"
       aria-labelledby="inside-title"
       tabIndex={-1}
-      style={{ ["--flav-ground" as string]: themeOf(flavour).ground }}
+      style={{ ["--flav-ground" as string]: look(flavour).ground }}
     >
       <div className="inside__pin">
         <div className="inside__num" aria-hidden="true">
@@ -75,11 +70,12 @@ export function Inside() {
         </div>
 
         <div className="inside__tub">
-          <TubScene flavour={flavour} controllerRef={tub} idleSpin={false} interactive={false} className="inside__canvas" />
+          {/* The tub flies in from the hero (Traveller) and lands here. */}
+          <div className="inside__canvas" data-tub-slot="inside" />
         </div>
 
         <div className="inside__copy">
-          <h2 id="inside-title" className="kicker">What&rsquo;s inside</h2>
+          <h2 id="inside-title" className="kicker">{title}</h2>
           <div className="inside__swap" aria-hidden="true">
             <AnimatePresence mode="popLayout" initial={false}>
               <motion.p key={step} className="inside__head" {...fade}>{STEPS[step].head}</motion.p>
@@ -93,13 +89,13 @@ export function Inside() {
           <ol className="sr-only">
             {STEPS.map((s) => <li key={s.head}>{s.head}. {s.cap}</li>)}
           </ol>
-          <p className="inside__note">Amounts per 10 g scoop. No.3 is a demo product; this formula is a sample.</p>
+          {note ? <p className="inside__note">{note}</p> : null}
         </div>
 
         <div className="inside__steps" role="group" aria-label="Jump to a step">
           {STEPS.map((s, i) => (
             <button key={s.head} type="button" aria-current={i === step ? "step" : undefined} onClick={() => goTo(i)} aria-label={`Step ${i + 1}: ${s.head}`}>
-              <StepIcon name={s.icon} />
+              <StepIcon name={ICONS[i % ICONS.length]} />
             </button>
           ))}
         </div>
@@ -110,7 +106,7 @@ export function Inside() {
   );
 }
 
-function StepIcon({ name }: { name: (typeof STEPS)[number]["icon"] }) {
+function StepIcon({ name }: { name: (typeof ICONS)[number] }) {
   const p = { fill: "none", stroke: "currentColor", strokeWidth: 1.6, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
   return (
     <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">

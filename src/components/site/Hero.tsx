@@ -8,8 +8,7 @@ import {
   useInView,
   type Variants,
 } from "framer-motion";
-import { TubScene } from "./TubScene";
-import { themeOf, useFlavour } from "./Flavour";
+import { useFlavour } from "./Flavour";
 import { EASE, useReduce } from "./Reveal";
 
 /*
@@ -47,10 +46,10 @@ const BITS = [
   { x: "90%", y: "64%", s: 0.55, d: 4 },
 ];
 
-export function Hero({ price }: { price: string }) {
-  const { flavours, index, flavour, dir, go, setFlavour } = useFlavour();
+export function Hero({ price, lede }: { price: string; lede: string }) {
+  const { flavours, index, flavour, dir, go, setFlavour, look } = useFlavour();
   const reduce = useReduce();
-  const theme = themeOf(flavour);
+  const theme = look(flavour);
 
   const root = useRef<HTMLElement>(null);
   const onScreen = useInView(root, { amount: 0.5 });
@@ -142,10 +141,10 @@ export function Hero({ price }: { price: string }) {
           initial={reduce ? false : { opacity: 0 }}
           animate={
             reduce
-              ? { opacity: 0.4, backgroundColor: theme.bit }
+              ? { opacity: 0.4, backgroundColor: theme.lid }
               : {
                   opacity: 0.42,
-                  backgroundColor: theme.bit,
+                  backgroundColor: theme.lid,
                   y: [0, -22 - b.d * 3, 0],
                   x: [0, b.d % 2 ? 12 : -12, 0],
                   rotate: [0, b.d % 2 ? 10 : -10, 0],
@@ -192,9 +191,8 @@ export function Hero({ price }: { price: string }) {
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ duration: 1.3, ease: [0.16, 1, 0.3, 1], delay: 0.15 }}
       >
-        <motion.div className="hero__tubin" animate={squash}>
-          <TubScene flavour={flavour} className="hero__tubcanvas" idleSpin interactive />
-        </motion.div>
+        {/* The tub itself is the shared Traveller; this is where it stands in the hero. */}
+        <motion.div className="hero__tubin" data-tub-slot="hero" animate={squash} />
       </motion.div>
 
       <div className="hero__title" aria-hidden="true">
@@ -257,7 +255,7 @@ export function Hero({ price }: { price: string }) {
         transition={{ duration: 0.8, ease: EASE, delay: 0.6 }}
       >
         <div className="hero__left">
-          <p className="hero__lede">No.3 Daily Blend. One tub, thirty scoops, one month.</p>
+          <p className="hero__lede">{lede}</p>
           <div className="hero__pills" role="group" aria-label="Flavour">
             {flavours.map((f) => (
               <button
@@ -267,7 +265,7 @@ export function Hero({ price }: { price: string }) {
                 aria-pressed={f === flavour}
                 onClick={() => { touched.current = Date.now(); setFlavour(f); }}
               >
-                <span className="pill__dot" style={{ background: themeOf(f).deep }} aria-hidden="true" />
+                <span className="pill__dot" style={{ background: look(f).lid }} aria-hidden="true" />
                 {f}
                 {f === flavour ? <motion.span layoutId="pill-on" className="pill__on" transition={{ type: "spring", stiffness: 420, damping: 34 }} /> : null}
               </button>

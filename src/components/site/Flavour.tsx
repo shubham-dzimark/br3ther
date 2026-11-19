@@ -8,16 +8,11 @@ import { MotionConfig } from "framer-motion";
  * pinned "inside" scene and the buy panel: picking Black cherry in the hero
  * means the checkout opens on Black cherry too, and the other way round.
  *
- * Each flavour owns a ground colour (the page behind the tub) chosen so black
- * text keeps at least 6:1 contrast on it, and a deeper tone for accents.
+ * Each flavour's colours (the ground behind the tub and the lid) are set in
+ * Admin > Home Page Control and passed in from the server as `looks`.
  */
-export const FLAVOUR_THEME: Record<string, { ground: string; deep: string; bit: string }> = {
-  Unflavoured: { ground: "#d9d5cc", deep: "#8f897c", bit: "#f4f2ec" },
-  "Black cherry": { ground: "#cf8f99", deep: "#6b1828", bit: "#5a1020" },
-  "Citrus salt": { ground: "#dccf5f", deep: "#8a7d12", bit: "#f2ea9a" },
-};
-const FALLBACK = { ground: "#d9d5cc", deep: "#8f897c", bit: "#f4f2ec" };
-export const themeOf = (f: string) => FLAVOUR_THEME[f] ?? FALLBACK;
+export type Look = { ground: string; lid: string };
+const NEUTRAL: Look = { ground: "#d9d5cc", lid: "#ecece8" };
 
 type Ctx = {
   flavours: string[];
@@ -27,6 +22,8 @@ type Ctx = {
   dir: number;
   go: (delta: number) => void;
   setFlavour: (f: string) => void;
+  /** The colours a flavour is shown in. */
+  look: (f: string) => Look;
 };
 
 const FlavourCtx = createContext<Ctx | null>(null);
@@ -34,10 +31,12 @@ const FlavourCtx = createContext<Ctx | null>(null);
 export function FlavourProvider({
   flavours,
   initial,
+  looks = {},
   children,
 }: {
   flavours: string[];
   initial?: string;
+  looks?: Record<string, Look>;
   children: React.ReactNode;
 }) {
   const key = flavours.join("|");
@@ -60,9 +59,15 @@ export function FlavourProvider({
     [list],
   );
 
+  const looksKey = JSON.stringify(looks);
+  const look = useCallback(
+    (f: string) => looks[f] ?? NEUTRAL,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [looksKey],
+  );
   const value = useMemo(
-    () => ({ flavours: list, index: state.index, flavour: list[state.index], dir: state.dir, go, setFlavour }),
-    [list, state, go, setFlavour],
+    () => ({ flavours: list, index: state.index, flavour: list[state.index], dir: state.dir, go, setFlavour, look }),
+    [list, state, go, setFlavour, look],
   );
   return (
     <MotionConfig reducedMotion="user">

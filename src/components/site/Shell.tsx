@@ -1,36 +1,73 @@
-import Link from "next/link";
 import { getCurrentCustomer } from "@/lib/customer-auth";
+import { checkoutGateways } from "@/lib/payment-gateways";
+import { getSiteContent, lookOf } from "@/lib/site-content";
+import { getSiteProduct } from "@/lib/site-product";
 import { SiteHeader } from "./Chrome";
+import { Footer } from "./Footer";
+import { Reveal, RevealItem, SplitHeading } from "./Reveal";
 
-/** The follow-up pages (receipt, tracking, account): the site's bar, the page, a slim close. */
+/*
+ * The follow-up pages (receipt, crypto payment, order tracking, account,
+ * unsubscribe) in the homepage's design: the same header and footer, a title
+ * band on the default flavour's colour (set in Admin > Home Page Control) with
+ * the hero's rings, a poster title that rises in word by word, and rounded
+ * panels underneath.
+ */
 export async function Shell({ children }: { children: React.ReactNode }) {
-  const customer = await getCurrentCustomer();
+  const [customer, content, product, gateways] = await Promise.all([
+    getCurrentCustomer(),
+    getSiteContent(),
+    getSiteProduct().catch(() => null),
+    checkoutGateways({ subtotalCents: 4900, isAdmin: false }).catch(() => []),
+  ]);
+  const flavour =
+    product?.variants.find((v) => v.id === product.defaultVariantId)?.flavour ?? product?.flavours[0] ?? "Unflavoured";
+  const look = lookOf(content, flavour);
+  const payments = gateways.map((g) => (g.key === "emt" ? "Interac e-Transfer" : g.key === "crypto" ? "Crypto" : g.title));
+
   return (
     <>
+      <a href="#main" className="sr-only">Skip to content</a>
       <SiteHeader signedIn={Boolean(customer)} />
-      <main id="main" className="page">
+      <main id="main" className="page" style={{ ["--ground" as string]: look.ground, ["--lid" as string]: look.lid }}>
         <div className="page__inner">{children}</div>
       </main>
-      <footer className="on-dark" style={{ background: "var(--dark)", color: "var(--on-dark)", padding: "28px var(--m)" }}>
-        <div className="page__inner" style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap", fontSize: "0.9375rem" }}>
-          <span>© {new Date().getFullYear()} Br3thr</span>
-          <span style={{ display: "flex", gap: 24 }}>
-            <Link href="/">Shop</Link>
-            <Link href="/track-order">Track order</Link>
-            <a href="mailto:help@br3thr.com">help@br3thr.com</a>
-          </span>
-        </div>
-      </footer>
+      <Footer signedIn={Boolean(customer)} payments={payments.length ? payments : undefined} />
     </>
   );
 }
 
-/** Heading block for a follow-up page. */
-export function PageHead({ title, lede }: { title: string; lede?: React.ReactNode }) {
+/**
+ * The title band at the top of a follow-up page. `aside` sits at the right of
+ * the band (e.g. the account page's Sign out); `kicker` is the small line above
+ * the title.
+ */
+export function PageHead({
+  title,
+  lede,
+  kicker,
+  aside,
+}: {
+  title: string;
+  lede?: React.ReactNode;
+  kicker?: string;
+  aside?: React.ReactNode;
+}) {
   return (
-    <header style={{ marginBottom: 40 }}>
-      <h1 className="display page__title">{title}</h1>
-      {lede ? <p className="lead muted" style={{ maxWidth: "40ch" }}>{lede}</p> : null}
+    <header className="pagehead">
+      <span className="pagehead__rings" aria-hidden="true" />
+      <div className="pagehead__inner">
+        <div className="pagehead__text">
+          {kicker ? <p className="kicker pagehead__kicker">{kicker}</p> : null}
+          <SplitHeading as="h1" className="poster pagehead__title" text={title} />
+          {lede ? (
+            <Reveal>
+              <RevealItem as="p" className="pagehead__lede">{lede}</RevealItem>
+            </Reveal>
+          ) : null}
+        </div>
+        {aside ? <div className="pagehead__aside">{aside}</div> : null}
+      </div>
     </header>
   );
 }

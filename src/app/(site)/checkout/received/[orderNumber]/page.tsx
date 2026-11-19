@@ -94,6 +94,7 @@ export default async function OrderReceivedPage({
   return (
     <Shell>
       <PageHead
+        kicker="Receipt"
         title={paid ? "Paid. Thank you." : `Thanks${first ? `, ${first}` : ""}.`}
         lede={<>Order <b>{label}</b> is in. A copy went to {order.email}.</>}
       />
@@ -102,13 +103,13 @@ export default async function OrderReceivedPage({
         <div>
           {paid ? (
             <section className="panel panel--dark on-dark" aria-labelledby="pay-title">
-              <h2 id="pay-title" className="h2" style={{ fontSize: "2rem" }}>Payment received</h2>
+              <h2 id="pay-title" className="panel__title" style={{ fontSize: "2.25rem" }}>Payment received</h2>
               <p className="muted-dark" style={{ marginTop: 8 }}>{amount} for {label}. We&rsquo;re packing it.</p>
             </section>
           ) : (
             <section className="panel panel--dark on-dark" aria-labelledby="pay-title">
-              <h2 id="pay-title" style={{ fontWeight: 700 }}>Pay by {emt.title}</h2>
-              <p className="display" style={{ fontSize: "clamp(2.75rem, 1.5rem + 4vw, 4.5rem)", marginTop: 12 }}>
+              <h2 id="pay-title" className="kicker">Pay by {emt.title}</h2>
+              <p className="poster" style={{ fontSize: "clamp(2.75rem, 1.5rem + 4vw, 4.5rem)", marginTop: 14 }}>
                 {amount}
                 <CopyButton value={amount.replace(/[^0-9.]/g, "")} label="amount" />
               </p>
@@ -149,7 +150,7 @@ export default async function OrderReceivedPage({
         </div>
 
         <section className="panel" aria-labelledby="order-title">
-          <h2 id="order-title" style={{ fontWeight: 700, marginBottom: 8 }}>Your order</h2>
+          <h2 id="order-title" className="panel__title">Your order</h2>
           <dl className="rows">
             {order.items.map((i) => (
               <div key={i.id}>

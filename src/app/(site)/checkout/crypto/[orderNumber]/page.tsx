@@ -29,6 +29,7 @@ export const metadata: Metadata = {
 function Box({ children, center = false }: { children: ReactNode; center?: boolean }) {
   return (
     <Shell>
+      <PageHead kicker="Checkout" title="Crypto payment" />
       <div className="panel" style={{ maxWidth: 640, textAlign: center ? "center" : undefined }}>{children}</div>
     </Shell>
   );
@@ -76,7 +77,7 @@ export default async function CryptoPaymentPage({
   if (!sp.t && !viewer) {
     return (
       <Box>
-        <p className="text-sm text-slate-700">Missing order reference.</p>
+        <p className="muted">Missing order reference.</p>
       </Box>
     );
   }
@@ -95,7 +96,7 @@ export default async function CryptoPaymentPage({
   if (!order || access === "denied" || order.paymentMethodKey !== CRYPTO_KEY) {
     return (
       <Box>
-        <p className="text-sm text-slate-700">This payment link is invalid.</p>
+        <p className="muted">This payment link is invalid.</p>
       </Box>
     );
   }
@@ -103,7 +104,7 @@ export default async function CryptoPaymentPage({
   if (isPaidStatus(order.status)) {
     return (
       <Box center>
-        <span className="mb-3 inline-block" aria-hidden="true">
+        <span style={{ display: "inline-block", marginBottom: 12 }} aria-hidden="true">
           <svg viewBox="0 0 52 52" width="72" height="72" xmlns="http://www.w3.org/2000/svg">
             <circle cx="26" cy="26" r="24" fill="none" stroke="#2ea44f" strokeWidth="2" />
             <path
@@ -116,8 +117,8 @@ export default async function CryptoPaymentPage({
             />
           </svg>
         </span>
-        <h1 className="mb-2 text-2xl font-bold text-emerald-800">Payment received</h1>
-        <p className="text-sm text-slate-600">
+        <h2 className="panel__title" style={{ color: "var(--ok)" }}>Payment received</h2>
+        <p className="muted">
           Thank you — your payment for order {orderNo(order.orderNumber)} has been received.
         </p>
       </Box>
@@ -127,7 +128,7 @@ export default async function CryptoPaymentPage({
   if (order.status !== "AWAITING_PAYMENT") {
     return (
       <Box>
-        <p className="text-sm text-slate-700">This order is not awaiting payment.</p>
+        <p className="muted">This order is not awaiting payment.</p>
       </Box>
     );
   }
@@ -135,7 +136,7 @@ export default async function CryptoPaymentPage({
   if (!cfg.active) {
     return (
       <Box>
-        <p className="text-sm text-slate-700">
+        <p className="muted">
           Crypto payment is not currently available. Please contact support.
         </p>
       </Box>
@@ -149,7 +150,7 @@ export default async function CryptoPaymentPage({
   if (!site.ok || !site.data) {
     return (
       <Box>
-        <p className="text-sm text-slate-700">Unable to load payment options right now. Please refresh the page.</p>
+        <p className="muted">Unable to load payment options right now. Please refresh the page.</p>
       </Box>
     );
   }
@@ -201,7 +202,7 @@ export default async function CryptoPaymentPage({
       <div style={{ maxWidth: 640 }}>
         {description ? (
           <div
-            className="nl-prose mb-7 text-sm text-slate-600"
+            className="muted" style={{ marginBottom: 28 }}
             dangerouslySetInnerHTML={{ __html: description }}
           />
         ) : null}

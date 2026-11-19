@@ -25,10 +25,19 @@ export function TrackForm({ defaultEmail }: { defaultEmail: string }) {
       </form>
 
       <div aria-live="polite">
-        {state.status === "error" ? <p className="notice" role="alert">{state.message}</p> : null}
+        {state.status !== "found" ? (
+          <div className="panel panel--soft">
+            <h2 className="panel__title">What you&rsquo;ll see</h2>
+            <p className="muted">
+              Whether the payment has landed, when the order is packed and shipped, and the tracking number with a link to
+              follow the parcel once it&rsquo;s on its way.
+            </p>
+          </div>
+        ) : null}
+        {state.status === "error" ? <p className="notice" role="alert" style={{ marginTop: 16 }}>{state.message}</p> : null}
         {state.status === "found" ? (
           <div className="panel panel--dark on-dark">
-            <h2 className="h2" style={{ fontSize: "2rem" }}>{state.statusLabel}</h2>
+            <h2 className="panel__title" style={{ fontSize: "2.25rem" }}>{state.statusLabel}</h2>
             <p className="muted-dark" style={{ marginTop: 6 }}>Order {state.orderNumber} · placed {state.placed}</p>
             {state.notice ? <p style={{ marginTop: 16 }}>{state.notice}</p> : null}
 

@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getCurrentCustomer } from "@/lib/customer-auth";
-import { Shell, Field } from "@/components/site/Shell";
+import { Shell, PageHead, Field } from "@/components/site/Shell";
 import { loginCustomer, registerCustomer } from "../actions";
 
 export const dynamic = "force-dynamic";
@@ -32,16 +32,16 @@ export default async function AccountLoginPage({
 
   return (
     <Shell>
+      <PageHead
+        kicker="Your account"
+        title={register ? "Create an account" : "Sign in"}
+        lede={
+          register
+            ? "Every order placed with your email, in one list. You never need an account to buy."
+            : "See your orders and their payment and shipping status."
+        }
+      />
       <div className="two">
-        <div>
-          <h1 className="display page__title">{register ? "Create an account" : "Sign in"}</h1>
-          <p className="lead muted" style={{ maxWidth: "34ch" }}>
-            {register
-              ? "Every order placed with your email, in one list. You never need an account to buy."
-              : "See your orders and their payment and shipping status."}
-          </p>
-        </div>
-
         <div className="panel">
           <nav className="tabs" aria-label="Account">
             <Link href="/account/login" aria-current={register ? undefined : "page"}>Sign in</Link>
@@ -73,6 +73,14 @@ export default async function AccountLoginPage({
             </form>
           )}
         </div>
+
+        <aside className="panel panel--soft" aria-label="Without an account">
+          <h2 className="panel__title">No account needed to buy</h2>
+          <p className="muted">Every order can be followed with its number and the email it was placed with.</p>
+          <p style={{ marginTop: 20 }}>
+            <Link className="btn btn--ghost" href="/track-order">Track an order</Link>
+          </p>
+        </aside>
       </div>
     </Shell>
   );

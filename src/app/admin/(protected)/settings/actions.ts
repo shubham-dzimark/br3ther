@@ -539,11 +539,18 @@ export async function saveHeaderSettings(fd: FormData): Promise<void> {
 }
 
 
-/** Home Page Control: the Br3thr homepage's sections, stored as one JSON setting. */
-export async function saveGfHome(fd: FormData): Promise<void> {
+/** Home Page Control: the one-page site's words and flavour colours, stored as one JSON setting. */
+export async function saveSiteContent(fd: FormData): Promise<void> {
   await requireCapability("content");
-  const { GF_HOME_KEY, gfHomeFromForm } = await import("@/lib/gf-home");
-  await setSettings({ [GF_HOME_KEY]: JSON.stringify(gfHomeFromForm(fd)) });
+  const { SITE_CONTENT_KEY, siteContentFromForm } = await import("@/lib/site-content");
+  let names: string[] = [];
+  try {
+    const parsed = JSON.parse(String(fd.get("flavourNames") ?? "[]"));
+    if (Array.isArray(parsed)) names = parsed.filter((n): n is string => typeof n === "string").slice(0, 24);
+  } catch {
+    names = [];
+  }
+  await setSettings({ [SITE_CONTENT_KEY]: JSON.stringify(siteContentFromForm(fd, names)) });
   revalidatePath("/", "layout");
   redirect("/admin/content/home?saved=1");
 }

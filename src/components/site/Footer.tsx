@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { WordSvg, BR3THR } from "./Wordmark";
+import { FootMark } from "./Sections";
 
 /* Photograph credits, required by their licences and kept on the page. */
 const CREDITS = [
@@ -12,7 +12,8 @@ const CREDITS = [
   "Rob Bye",
 ];
 
-export function Footer({ signedIn }: { signedIn: boolean }) {
+/** `payments`: the methods checkout offers right now, so the footer never lists one that is switched off. */
+export function Footer({ signedIn, payments = ["Interac e-Transfer"] }: { signedIn: boolean; payments?: string[] }) {
   return (
     <footer className="foot on-dark" aria-labelledby="foot-title">
       <h2 id="foot-title" className="sr-only">About Br3thr</h2>
@@ -35,8 +36,7 @@ export function Footer({ signedIn }: { signedIn: boolean }) {
         <div>
           <h2>Payment</h2>
           <ul>
-            <li>Interac e-Transfer</li>
-            <li>Crypto</li>
+            {payments.map((p) => <li key={p}>{p}</li>)}
             <li>Shipping across Canada</li>
           </ul>
         </div>
@@ -48,9 +48,7 @@ export function Footer({ signedIn }: { signedIn: boolean }) {
         </div>
       </div>
       <div />
-      <div className="foot__mark">
-        <WordSvg letters={BR3THR} title="BR3THR" />
-      </div>
+      <FootMark />
       <div className="foot__legal">
         <span>© {new Date().getFullYear()} Br3thr. No.3 Daily Blend is a demo product.</span>
         <span>

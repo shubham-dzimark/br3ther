@@ -19,14 +19,11 @@ export type TubController = {
   setProgress: (p: number) => void;
 };
 
-export const FLAVOUR_LIDS: Record<string, string> = {
-  Unflavoured: "#ecece8",
-  "Black cherry": "#5a1020",
-  "Citrus salt": "#d6cb4a",
-};
 
 type Props = {
   flavour?: string;
+  /** The lid's colour for this flavour (set per flavour in the admin). */
+  lid?: string;
   controllerRef?: React.MutableRefObject<TubController | null>;
   /** Slow turn when nothing is driving it. */
   idleSpin?: boolean;
@@ -41,6 +38,7 @@ type Props = {
 
 export function TubScene({
   flavour = "Unflavoured",
+  lid = "#ecece8",
   controllerRef,
   idleSpin = true,
   interactive = true,
@@ -50,10 +48,10 @@ export function TubScene({
   detail = "300 G  ·  30 SERVINGS",
 }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
-  const apiRef = useRef<{ setFlavour: (f: string) => void } | null>(null);
-  const [ready, setReady] = useState(false);
+  const apiRef = useRef<{ setFlavour: (f: string, lid: string) => void } | null>(null);
   const [failed, setFailed] = useState(false);
   const currentFlavour = useRef(flavour);
+  const currentLid = useRef(lid);
   const currentDetail = useRef(detail);
 
   useEffect(() => {
@@ -81,7 +79,8 @@ export function TubScene({
       renderer.toneMappingExposure = 1.05;
       const canvas = renderer.domElement;
       canvas.setAttribute("aria-hidden", "true");
-      canvas.style.cssText = "position:absolute;inset:0;width:100%;height:100%;display:block";
+      // Hidden until the first frame is drawn, then faded in (no flash of an empty canvas).
+      canvas.style.cssText = "position:absolute;inset:0;width:100%;height:100%;display:block;opacity:0;transition:opacity .6s cubic-bezier(.22,1,.36,1)";
       host.appendChild(canvas);
 
       const scene = new THREE.Scene();
@@ -182,7 +181,7 @@ export function TubScene({
       // ---- lid ----
       const lid = new THREE.Group();
       const lidMat = track(
-        new THREE.MeshPhysicalMaterial({ color: new THREE.Color(FLAVOUR_LIDS[currentFlavour.current] ?? "#ecece8"), roughness: 0.5, clearcoat: 0.3 }),
+        new THREE.MeshPhysicalMaterial({ color: new THREE.Color(currentLid.current), roughness: 0.5, clearcoat: 0.3 }),
       );
       const lidGeo = track(new THREE.CylinderGeometry(1.04, 1.045, 0.3, 160));
       const lidBody = new THREE.Mesh(lidGeo, lidMat);
@@ -239,20 +238,22 @@ export function TubScene({
       let progress = 0;
       let spin = 0;
       let tiltX = 0, tiltY = 0, tTiltX = 0, tTiltY = 0;
-      const targetLid = new THREE.Color(FLAVOUR_LIDS[currentFlavour.current] ?? "#ecece8");
+      const targetLid = new THREE.Color(currentLid.current);
       let dirty = true;
       const smooth = (a: number, b: number, x: number) => {
         const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
         return t * t * (3 - 2 * t);
       };
 
+      let baseZ = 7.4;
       const resize = () => {
         const w = host.clientWidth, h = host.clientHeight;
         if (!w || !h) return;
         renderer.setSize(w, h, false);
         camera.aspect = w / h;
         // keep the whole tub (and a lifted lid) in frame at any aspect
-        camera.position.z = w / h < 0.8 ? 7.4 / (w / h / 0.8) : 7.4;
+        baseZ = w / h < 0.8 ? 7.4 / (w / h / 0.8) : 7.4;
+        camera.position.z = baseZ;
         camera.updateProjectionMatrix();
         dirty = true;
       };
@@ -293,6 +294,11 @@ export function TubScene({
         tub.rotation.y = 0.12 + spin + progress * Math.PI * 1.5 + tiltY;
         tub.rotation.x = tiltX;
         lid.position.y = LID_Y + lift * 0.62;
+        // An open lid rises above the closed tub's frame: ease the camera back
+        // and aim a little higher so the whole lid stays in view.
+        camera.position.z = baseZ * (1 + lift * 0.2);
+        camera.position.y = 0.35 + lift * 0.3;
+        camera.lookAt(0, lift * 0.32, 0);
         lid.rotation.x = -lift * 0.32;
         lid.rotation.z = lift * 0.12;
         renderer.render(scene, camera);
@@ -317,14 +323,19 @@ export function TubScene({
         };
       }
       apiRef.current = {
-        setFlavour: (f: string) => { targetLid.set(FLAVOUR_LIDS[f] ?? "#ecece8"); drawLabel(f); dirty = true; kick(); },
+        setFlavour: (f: string, c: string) => { targetLid.set(c); drawLabel(f); dirty = true; kick(); },
       };
 
       // label fonts may arrive after the first draw
       document.fonts?.ready.then(() => { if (!disposed) { drawLabel(currentFlavour.current); dirty = true; kick(); } });
 
       kick();
-      setReady(true);
+      // Show the canvas once a frame is on it, and tell the page loader the tub is ready.
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        if (disposed) return;
+        canvas.style.opacity = "1";
+        window.dispatchEvent(new CustomEvent("br3thr:tub-ready"));
+      }));
 
       cleanup = () => {
         cancelAnimationFrame(raf);
@@ -352,9 +363,10 @@ export function TubScene({
 
   useEffect(() => {
     currentFlavour.current = flavour;
+    currentLid.current = lid;
     currentDetail.current = detail;
-    apiRef.current?.setFlavour(flavour);
-  }, [flavour, detail]);
+    apiRef.current?.setFlavour(flavour, lid);
+  }, [flavour, lid, detail]);
 
   return (
     <div
@@ -364,18 +376,16 @@ export function TubScene({
       aria-label={`${label}, ${flavour}`}
       style={{ position: "relative", width: "100%", height: "100%" }}
     >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={poster}
-        alt=""
-        aria-hidden="true"
-        style={{
-          position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain",
-          opacity: ready && !failed ? 0 : 1, transition: "opacity .4s",
-          // the still is on white; multiply lets it sit on any light ground
-          mixBlendMode: "multiply",
-        }}
-      />
+      {failed ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={poster}
+          alt=""
+          aria-hidden="true"
+          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", mixBlendMode: "multiply" }}
+        />
+      ) : null}
     </div>
   );
 }
+

@@ -12,7 +12,7 @@ export default async function ForgotPage({ searchParams }: { searchParams: Promi
       <PageHead title="Reset your password" lede="Enter the email on your account and we'll send a link to choose a new password." />
       <div className="panel" style={{ maxWidth: 560 }}>
         {sent ? (
-          <p className="ok-note" role="status">If there's an account for that email, the link is on its way. It works for one hour.</p>
+          <p className="ok-note" role="status">If there&rsquo;s an account for that email, the link is on its way. It works for one hour.</p>
         ) : null}
         {error ? <p className="notice" role="alert">Enter a valid email address.</p> : null}
         <form action={requestPasswordReset} className="form-narrow" style={{ marginTop: 16 }}>

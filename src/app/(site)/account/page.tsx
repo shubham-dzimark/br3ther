@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { requireCustomer } from "@/lib/customer-auth";
 import { orderNo } from "@/lib/order-display";
-import { Shell } from "@/components/site/Shell";
+import { Shell, PageHead } from "@/components/site/Shell";
 import { logoutCustomer } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -38,20 +38,21 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
 
   return (
     <Shell>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "end", gap: 24, flexWrap: "wrap", marginBottom: 40 }}>
-        <div>
-          <h1 className="display page__title">{first ? `Hello, ${first}` : "Your account"}</h1>
-          <p className="lead muted">{customer.email}</p>
-        </div>
-        <form action={logoutCustomer}>
-          <button className="btn btn--ghost" type="submit">Sign out</button>
-        </form>
-      </div>
+      <PageHead
+        kicker="Your account"
+        title={first ? `Hello, ${first}` : "Your account"}
+        lede={customer.email}
+        aside={
+          <form action={logoutCustomer}>
+            <button className="btn btn--ghost" type="submit">Sign out</button>
+          </form>
+        }
+      />
 
       {welcome ? <p className="ok-note" role="status" style={{ marginBottom: 24 }}>Your account is ready.</p> : null}
 
       <section aria-labelledby="orders-title">
-        <h2 id="orders-title" className="h2" style={{ fontSize: "2rem", marginBottom: 16 }}>Orders</h2>
+        <h2 id="orders-title" className="poster section-title">Orders</h2>
         {orders.length === 0 ? (
           <div className="panel">
             <p className="lead">No orders yet.</p>
