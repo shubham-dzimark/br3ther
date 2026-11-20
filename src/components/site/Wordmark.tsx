@@ -25,11 +25,13 @@ export function WordSvg({
   /** Accessible name; omit when the word is decorative. */
   title?: string;
 }) {
-  let x = 0;
+  const offsets = letters.map((_, i) =>
+    letters.slice(0, i).reduce((sum, l) => sum + GLYPHS[l].w + GAP, 0),
+  );
+  const x = letters.length ? offsets[letters.length - 1] + GLYPHS[letters[letters.length - 1]].w : 0;
   const parts = letters.map((l, i) => {
     const g = GLYPHS[l];
-    const at = x;
-    x += g.w + (i < letters.length - 1 ? GAP : 0);
+    const at = offsets[i];
     return (
       <g key={i} transform={`translate(${at},0)`}>
         {g.paths.map((p, j) => (

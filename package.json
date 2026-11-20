@@ -26,7 +26,6 @@
     "framer-motion": "^14.14.0",
     "gsap": "^3.15.0",
     "imapflow": "^2.11.0",
-    "lenis": "^1.1.18",
     "mailparser": "^3.14.3",
     "next": "16.3.3",
     "nodemailer": "^10.0.0",
