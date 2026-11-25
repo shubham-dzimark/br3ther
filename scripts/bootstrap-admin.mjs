@@ -26,7 +26,16 @@ if (password.length < 12) {
 const client = new pg.Client({ connectionString: url });
 await client.connect();
 const { rows } = await client.query(`SELECT count(*)::int AS n FROM "AdminUser"`);
-if (rows[0].n > 0) {
+if (process.env.BOOTSTRAP_ADMIN_RESET === "1") {
+  // One-off recovery: set BOOTSTRAP_ADMIN_RESET=1 for a single deploy, then
+  // remove it, or every build would put the password back.
+  const res = await client.query(
+    `UPDATE "AdminUser" SET "passwordHash" = $1, "lockedUntil" = NULL, "isActive" = true, "updatedAt" = now()
+     WHERE lower(email) = $2`,
+    [await bcrypt.hash(process.env.BOOTSTRAP_ADMIN_NEW_PASSWORD || password, 12), email],
+  );
+  console.log(res.rowCount ? `bootstrap-admin: password reset for ${email}` : `bootstrap-admin: no admin ${email} to reset`);
+} else if (rows[0].n > 0) {
   console.log("bootstrap-admin: an admin already exists, nothing to do");
 } else {
   const now = new Date();
